@@ -1,0 +1,571 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flame/game.dart';
+import 'package:provider/provider.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:confetti/confetti.dart';
+
+import '../../core/app_colors.dart';
+import '../../core/constants.dart';
+import '../../data/models/level.dart';
+import '../../data/repositories/progress_repository.dart';
+import '../../data/repositories/level_repository.dart';
+import '../../ads/ad_manager.dart';
+import '../../game/arrow_puzzle_game.dart';
+import '../../widgets/lives_bar.dart';
+
+class GameScreen extends StatefulWidget {
+  const GameScreen({super.key});
+
+  @override
+  State<GameScreen> createState() => _GameScreenState();
+}
+
+class _GameScreenState extends State<GameScreen> {
+  late LevelModel _level;
+  late ArrowPuzzleGame _game;
+  late ConfettiController _confettiController;
+  bool _showingGameOver = false;
+  bool _showingComplete = false;
+  int _lives = AppConstants.maxLives;
+
+  @override
+  void initState() {
+    super.initState();
+    _confettiController =
+        ConfettiController(duration: const Duration(seconds: 2));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final levelNum = args?['level'] as int? ?? 1;
+    final levelRepo = context.read<LevelRepository>();
+    _level = levelRepo.getLevel(levelNum);
+    _initGame();
+    // Pre-generate next levels
+    levelRepo.preGenerate(levelNum + 1, 5);
+  }
+
+  void _initGame() {
+    _lives = AppConstants.maxLives;
+    _showingGameOver = false;
+    _showingComplete = false;
+    _game = ArrowPuzzleGame(
+      level: _level,
+      onLevelComplete: _onLevelComplete,
+      onGameOver: _onGameOver,
+      onLifeLost: _onLifeLost,
+    );
+  }
+
+  void _onLifeLost() {
+    if (!mounted) return;
+    setState(() => _lives = _game.gameState.lives);
+    HapticFeedback.heavyImpact();
+  }
+
+  void _onLevelComplete() {
+    if (!mounted || _showingComplete) return;
+    setState(() => _showingComplete = true);
+    _confettiController.play();
+    HapticFeedback.lightImpact();
+
+    final progress = context.read<ProgressRepository>();
+    final adManager = context.read<AdManager>();
+    final stars = ProgressRepository.calculateStars(_game.gameState.livesLost,
+        _level.totalArrows, _game.gameState.movesUsed);
+    final score =
+        AppConstants.baseScore + (_lives * AppConstants.bonusPerRemainingLife);
+
+    progress.recordLevelComplete(LevelResult(
+      levelNumber: _level.levelNumber,
+      stars: stars,
+      score: score,
+      movesUsed: _game.gameState.movesUsed,
+      livesLost: _game.gameState.livesLost,
+      completed: true,
+      completedAt: DateTime.now(),
+    ));
+
+    final levelType = AppConstants.levelTypeFor(_level.levelNumber);
+    adManager.onLevelComplete(_level.levelNumber, levelType.isSpecial);
+
+    Future.delayed(const Duration(milliseconds: 1200), () {
+      if (mounted) _showLevelCompleteDialog(stars, score);
+    });
+  }
+
+  void _onGameOver() {
+    if (!mounted || _showingGameOver) return;
+    setState(() => _showingGameOver = true);
+    HapticFeedback.vibrate();
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) _showGameOverDialog();
+    });
+  }
+
+  Future<void> _showLevelCompleteDialog(int stars, int score) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _LevelCompleteDialog(
+        level: _level,
+        stars: stars,
+        score: score,
+        onNextLevel: () {
+          Navigator.pop(context);
+          Navigator.pushReplacementNamed(
+            context,
+            '/game',
+            arguments: {'level': _level.levelNumber + 1},
+          );
+        },
+        onMenu: () {
+          Navigator.pop(context);
+          Navigator.pushReplacementNamed(context, '/menu');
+        },
+        onDoubleCoins: () {
+          final adManager = context.read<AdManager>();
+          adManager.showRewarded(
+            onRewarded: () {
+              context.read<ProgressRepository>().addCoins(score ~/ 10);
+              Navigator.pop(context);
+              Navigator.pushReplacementNamed(context, '/game',
+                  arguments: {'level': _level.levelNumber + 1});
+            },
+            onDismissed: () => Navigator.pop(context),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showGameOverDialog() async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _GameOverDialog(
+        level: _level,
+        onContinue: () {
+          // Watch rewarded ad to restore 1 life
+          final adManager = context.read<AdManager>();
+          Navigator.pop(context);
+          adManager.showRewarded(
+            onRewarded: () {
+              setState(() {
+                _showingGameOver = false;
+                _game.gameState.restoreLife();
+                _lives = _game.gameState.lives;
+              });
+            },
+            onDismissed: () {},
+          );
+        },
+        onRestart: () {
+          Navigator.pop(context);
+          setState(() {
+            _showingGameOver = false;
+            _game.resetLevel();
+            _lives = AppConstants.maxLives;
+          });
+        },
+        onMenu: () {
+          Navigator.pop(context);
+          Navigator.pushReplacementNamed(context, '/menu');
+        },
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final levelType = AppConstants.levelTypeFor(_level.levelNumber);
+    final adManager = context.read<AdManager>();
+
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(gradient: AppColors.bgGradient),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // ── Top Bar ─────────────────────────────────────────────────
+              _TopBar(
+                level: _level,
+                levelType: levelType,
+                lives: _lives,
+                onBack: () => Navigator.pushReplacementNamed(context, '/menu'),
+              ),
+
+              // ── Game Canvas ──────────────────────────────────────────────
+              Expanded(
+                child: Stack(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      child: GameWidget(game: _game),
+                    ),
+
+                    // Confetti on level complete
+                    Align(
+                      alignment: Alignment.topCenter,
+                      child: ConfettiWidget(
+                        confettiController: _confettiController,
+                        blastDirectionality: BlastDirectionality.explosive,
+                        shouldLoop: false,
+                        colors: const [
+                          AppColors.primary,
+                          AppColors.accentGold,
+                          AppColors.accentGreen,
+                          AppColors.accent,
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // ── Banner Ad ────────────────────────────────────────────────
+              if (adManager.bannerAd != null)
+                SizedBox(
+                  height: 50,
+                  child: AdWidget(ad: adManager.bannerAd!),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Top Bar ─────────────────────────────────────────────────────────────────
+
+class _TopBar extends StatelessWidget {
+  final LevelModel level;
+  final LevelType levelType;
+  final int lives;
+  final VoidCallback onBack;
+
+  const _TopBar({
+    required this.level,
+    required this.levelType,
+    required this.lives,
+    required this.onBack,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          // Back
+          GestureDetector(
+            onTap: onBack,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceLight,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.arrow_back_ios_new_rounded,
+                  color: AppColors.textPrimary, size: 18),
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // Level info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (levelType.isSpecial)
+                  Text(levelType.label,
+                      style: GoogleFonts.nunito(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: levelType == LevelType.god
+                            ? AppColors.accent
+                            : AppColors.accentOrange,
+                        letterSpacing: 1.5,
+                      )),
+                Text('Level ${level.levelNumber}',
+                    style: GoogleFonts.nunito(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    )),
+                if (level.patternName.isNotEmpty)
+                  Text(level.patternName.replaceAll('_', ' ').toUpperCase(),
+                      style: GoogleFonts.nunito(
+                        fontSize: 10,
+                        color: AppColors.textMuted,
+                        letterSpacing: 2,
+                      )),
+              ],
+            ),
+          ),
+
+          // Lives
+          LivesBar(lives: lives, maxLives: AppConstants.maxLives),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Level Complete Dialog ─────────────────────────────────────────────────────
+
+class _LevelCompleteDialog extends StatelessWidget {
+  final LevelModel level;
+  final int stars;
+  final int score;
+  final VoidCallback onNextLevel;
+  final VoidCallback onMenu;
+  final VoidCallback onDoubleCoins;
+
+  const _LevelCompleteDialog({
+    required this.level,
+    required this.stars,
+    required this.score,
+    required this.onNextLevel,
+    required this.onMenu,
+    required this.onDoubleCoins,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+          boxShadow: [
+            BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.3),
+                blurRadius: 32),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('🎉', style: TextStyle(fontSize: 48)).animate().scale(
+                begin: const Offset(0, 0),
+                end: const Offset(1, 1),
+                duration: 400.ms,
+                curve: Curves.elasticOut),
+            const SizedBox(height: 8),
+            Text('Level Complete!',
+                style: GoogleFonts.nunito(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textPrimary)),
+            const SizedBox(height: 16),
+
+            // Stars
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                  3,
+                  (i) => Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Text(i < stars ? '⭐' : '☆',
+                            style: const TextStyle(fontSize: 32)),
+                      )
+                          .animate(delay: Duration(milliseconds: 200 + i * 150))
+                          .scale(
+                              begin: const Offset(0, 0),
+                              end: const Offset(1, 1),
+                              curve: Curves.elasticOut)),
+            ),
+            const SizedBox(height: 20),
+
+            // Score
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+              decoration: BoxDecoration(
+                color: AppColors.accentGold.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                    color: AppColors.accentGold.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('🪙', style: TextStyle(fontSize: 20)),
+                  const SizedBox(width: 8),
+                  Text('+$score',
+                      style: GoogleFonts.nunito(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.accentGold)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Next Level button
+            _DialogButton(
+              label: 'Next Level',
+              icon: Icons.play_arrow_rounded,
+              gradient: AppColors.primaryGradient,
+              onTap: onNextLevel,
+            ),
+            const SizedBox(height: 10),
+
+            // Double coins (rewarded ad)
+            _DialogButton(
+              label: '🎬 Double Coins',
+              icon: Icons.add_circle_outline,
+              gradient: const LinearGradient(
+                  colors: [Color(0xFF856404), Color(0xFFCC9A06)]),
+              onTap: onDoubleCoins,
+            ),
+            const SizedBox(height: 10),
+
+            TextButton(
+              onPressed: onMenu,
+              child: Text('Back to Menu',
+                  style: GoogleFonts.nunito(color: AppColors.textSecondary)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Game Over Dialog ──────────────────────────────────────────────────────────
+
+class _GameOverDialog extends StatelessWidget {
+  final LevelModel level;
+  final VoidCallback onContinue;
+  final VoidCallback onRestart;
+  final VoidCallback onMenu;
+
+  const _GameOverDialog({
+    required this.level,
+    required this.onContinue,
+    required this.onRestart,
+    required this.onMenu,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: AppColors.accent.withValues(alpha: 0.4)),
+          boxShadow: [
+            BoxShadow(
+                color: AppColors.accent.withValues(alpha: 0.2), blurRadius: 32),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('💔', style: TextStyle(fontSize: 52))
+                .animate()
+                .shake(duration: 500.ms),
+            const SizedBox(height: 8),
+            Text('Out of Lives!',
+                style: GoogleFonts.nunito(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textPrimary)),
+            const SizedBox(height: 8),
+            Text('Watch an ad to continue',
+                style: GoogleFonts.nunito(
+                    fontSize: 13, color: AppColors.textSecondary)),
+            const SizedBox(height: 28),
+
+            // Continue with ad
+            _DialogButton(
+              label: '🎬 Watch Ad to Continue',
+              icon: Icons.play_circle_outline,
+              gradient: AppColors.successGradient,
+              onTap: onContinue,
+            ),
+            const SizedBox(height: 10),
+
+            // Restart (all lives back)
+            _DialogButton(
+              label: 'Restart Level',
+              icon: Icons.refresh_rounded,
+              gradient: const LinearGradient(
+                  colors: [Color(0xFF252545), Color(0xFF1A1A2E)]),
+              onTap: onRestart,
+            ),
+            const SizedBox(height: 10),
+
+            TextButton(
+              onPressed: onMenu,
+              child: Text('Main Menu',
+                  style: GoogleFonts.nunito(color: AppColors.textSecondary)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DialogButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Gradient gradient;
+  final VoidCallback onTap;
+
+  const _DialogButton({
+    required this.label,
+    required this.icon,
+    required this.gradient,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+        decoration: BoxDecoration(
+          gradient: gradient,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
+            Text(label,
+                style: GoogleFonts.nunito(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white)),
+          ],
+        ),
+      ),
+    );
+  }
+}

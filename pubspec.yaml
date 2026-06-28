@@ -1,0 +1,66 @@
+name: arrow_puzzle
+description: Arrow Puzzle - A casual grid puzzle game where you slide arrows out of the grid.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Game Engine
+  flame: ^1.18.0
+  flame_audio: ^2.10.0
+
+  # Ads
+  google_mobile_ads: ^5.1.0
+  unity_ads_plugin: ^0.4.0
+
+  # State Management
+  provider: ^6.1.2
+
+  # Persistence
+  shared_preferences: ^2.3.2
+
+  # UI & Animations
+  google_fonts: ^6.2.1
+  lottie: ^3.1.2
+  confetti: ^0.7.0
+  flutter_animate: ^4.5.0
+
+  # Audio
+  audioplayers: ^6.1.0
+
+  # Utils
+  collection: ^1.18.0
+  intl: ^0.19.0
+  package_info_plus: ^8.1.2
+  url_launcher: ^6.3.0
+  lucide_icons_flutter: ^3.1.14+2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/audio/
+    - assets/lottie/
+    - assets/fonts/
+
+  fonts:
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito-Regular.ttf
+        - asset: assets/fonts/Nunito-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Nunito-ExtraBold.ttf
+          weight: 800
+        - asset: assets/fonts/Nunito-Black.ttf
+          weight: 900
