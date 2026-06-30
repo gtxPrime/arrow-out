@@ -71,35 +71,34 @@ void main() {
       expect(AppConstants.gridSizeForLevel(1), equals(10));
       expect(AppConstants.gridSizeForLevel(3), equals(10));
       expect(AppConstants.gridSizeForLevel(4), equals(10));
-      expect(AppConstants.gridSizeForLevel(20), equals(30)); // God
-      expect(AppConstants.gridSizeForLevel(21), equals(30)); // Boss
-      expect(AppConstants.gridSizeForLevel(50), equals(30)); // God
-      expect(AppConstants.gridSizeForLevel(100), equals(30)); // God
-      expect(AppConstants.gridSizeForLevel(101), equals(21)); // Normal (scales to ~21)
-      expect(AppConstants.gridSizeForLevel(200), equals(30)); // God
-      expect(AppConstants.gridSizeForLevel(201), equals(30)); // Normal (capped at 30)
-      expect(AppConstants.gridSizeForLevel(400), equals(30)); // God
-      expect(AppConstants.gridSizeForLevel(401), equals(30)); // Normal (capped at 30)
+      expect(AppConstants.gridSizeForLevel(7), equals(30)); // Boss
+      expect(AppConstants.gridSizeForLevel(10), equals(30)); // God
+      expect(AppConstants.gridSizeForLevel(14), equals(30)); // Boss
+      expect(AppConstants.gridSizeForLevel(20), equals(12)); // Normal: (10 + 17*0.115).round() = 12
+      expect(AppConstants.gridSizeForLevel(21), equals(30)); // Boss (pos = 4)
+      expect(AppConstants.gridSizeForLevel(100), equals(21)); // Normal: (10 + 97*0.115).round() = 21
+      expect(AppConstants.gridSizeForLevel(101), equals(30)); // God (pos = 7)
+      expect(AppConstants.gridSizeForLevel(200), equals(30)); // Normal (scales to >30 but capped at 30)
     });
 
     test('Level type classification is correct', () {
       // Tutorial
       expect(AppConstants.levelTypeFor(1), equals(LevelType.tutorial));
       expect(AppConstants.levelTypeFor(3), equals(LevelType.tutorial));
-      // God levels (5th, 10th, 15th, etc.)
-      expect(AppConstants.levelTypeFor(5), equals(LevelType.god));
+      // God levels (pos = 7)
       expect(AppConstants.levelTypeFor(10), equals(LevelType.god));
-      expect(AppConstants.levelTypeFor(15), equals(LevelType.god));
-      // Boss levels (3rd, 6th, 9th — not divisible by 5)
-      expect(AppConstants.levelTypeFor(3),
-          isNot(equals(LevelType.boss))); // tutorial takes priority
-      expect(AppConstants.levelTypeFor(6), equals(LevelType.boss));
-      expect(AppConstants.levelTypeFor(9), equals(LevelType.boss));
-      expect(AppConstants.levelTypeFor(12), equals(LevelType.boss));
+      expect(AppConstants.levelTypeFor(17), equals(LevelType.god));
+      expect(AppConstants.levelTypeFor(24), equals(LevelType.god));
+      // Boss levels (pos = 4)
+      expect(AppConstants.levelTypeFor(7), equals(LevelType.boss));
+      expect(AppConstants.levelTypeFor(14), equals(LevelType.boss));
+      expect(AppConstants.levelTypeFor(21), equals(LevelType.boss));
       // Normal levels
       expect(AppConstants.levelTypeFor(4), equals(LevelType.normal));
-      expect(AppConstants.levelTypeFor(7), equals(LevelType.normal));
-      expect(AppConstants.levelTypeFor(11), equals(LevelType.normal));
+      expect(AppConstants.levelTypeFor(5), equals(LevelType.normal));
+      expect(AppConstants.levelTypeFor(6), equals(LevelType.normal));
+      expect(AppConstants.levelTypeFor(8), equals(LevelType.normal));
+      expect(AppConstants.levelTypeFor(9), equals(LevelType.normal));
     });
 
     test('Level generation is deterministic (same seed = same level)', () {
