@@ -376,7 +376,9 @@ class LevelGenerator {
 
       // Determine color probability based on difficulty
       final double colorProb;
-      if (levelNumber <= 20) {
+      if (levelNumber == 3) {
+        colorProb = 0.60; // Colored orphan dots for tutorial level 3
+      } else if (levelNumber <= 20) {
         colorProb = 0.0; // Starting levels: all neutral
       } else if (type == LevelType.god) {
         colorProb = 0.85; // God levels: 85% colored
@@ -501,7 +503,7 @@ class LevelGenerator {
     // ═══════════════════════════════════════════════════════════════════════
     //  MECHANIC MIX (colorLock/colorKey pairs) with mutual-blocking prevention
     // ═══════════════════════════════════════════════════════════════════════
-    if (type != LevelType.tutorial && levelNumber >= 4) {
+    if (levelNumber == 2 || (type != LevelType.tutorial && levelNumber >= 4)) {
       _mechanicMix(arrows, levelNumber, type, rng, gridSize, orphanDots);
     }
 
@@ -796,6 +798,7 @@ class LevelGenerator {
     int pairs = 0;
     if (type == LevelType.god)       pairs = (arrows.length * 0.45).floor().clamp(2, 8);
     else if (type == LevelType.boss) pairs = (arrows.length * 0.35).floor().clamp(1, 6);
+    else if (level == 2)             pairs = 1; // Exactly 1 pair for tutorial level 2
     else if (level >= 4)             pairs = (arrows.length * 0.12).floor().clamp(0, 2);
 
     // Build orphan dot map for exit simulation

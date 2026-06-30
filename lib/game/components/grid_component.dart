@@ -135,12 +135,9 @@ class GridComponent extends PositionComponent {
 
   static void _drawOrphanDot(
       Canvas canvas, Offset center, OrphanDotType type, double cs) {
-    final Color baseColor;
-    if (type == OrphanDotType.neutral) {
-      baseColor = const Color(0xFF888888);
-    } else {
-      baseColor = const Color(0xFFFFAA00); // Gold/orange redirect plate
-    }
+    if (type == OrphanDotType.neutral) return; // Neutral empty dots can be left empty
+
+    const Color baseColor = Color(0xFFFFAA00); // Gold/orange redirect plate
 
     // Solid dot body (plate) - enlarged to be highly visible
     canvas.drawCircle(

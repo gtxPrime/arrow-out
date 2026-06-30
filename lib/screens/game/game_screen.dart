@@ -58,6 +58,12 @@ class _GameScreenState extends State<GameScreen> {
       _initGame();
       // Pre-generate next levels
       levelRepo.preGenerate(levelNum + 1, 5);
+
+      // Trigger start dialog for tutorial levels
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _showTutorialDialogIfNeeded(levelNum);
+      });
     }
   }
 
@@ -345,6 +351,251 @@ class _GameScreenState extends State<GameScreen> {
       ),
     );
   }
+
+  void _showTutorialDialogIfNeeded(int levelNum) {
+    if (levelNum == 2) {
+      _showTutorialDialog(
+        title: 'Color Locked Arrows',
+        description: 'Arrows with a matching color and keyhole lock each other! Tap the color key arrow first to unlock the path, and then you can clear the other color locked arrow.',
+        icon: LucideIcons.key,
+        iconColor: const Color(0xFFFF2D55),
+        animationWidget: _buildColorLockAnimation(),
+      );
+    } else if (levelNum == 3) {
+      _showTutorialDialog(
+        title: 'Deflector Dots',
+        description: 'Gold deflector dots change the direction of exiting arrows! Trace the exit path through the deflector dots to make sure the arrow escapes successfully.',
+        icon: LucideIcons.rotateCw,
+        iconColor: const Color(0xFFFFAA00),
+        animationWidget: _buildDeflectorAnimation(),
+      );
+    }
+  }
+
+  void _showTutorialDialog({
+    required String title,
+    required String description,
+    required IconData icon,
+    required Color iconColor,
+    required Widget animationWidget,
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.15),
+                  blurRadius: 24,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: iconColor.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: iconColor, size: 28),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.nunito(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  description,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.nunito(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                animationWidget,
+                const SizedBox(height: 24),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      gradient: AppColors.primaryGradient,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.25),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Text(
+                        'Start Tutorial',
+                        style: GoogleFonts.nunito(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildColorLockAnimation() {
+    return Container(
+      height: 100,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Center(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF2D55).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFF2D55), width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.key, color: Color(0xFFFF2D55), size: 16),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.arrow_upward_rounded, color: Color(0xFFFF2D55), size: 16),
+                ],
+              ),
+            ).animate(onPlay: (c) => c.repeat())
+             .scale(begin: const Offset(0.9, 0.9), end: const Offset(1.05, 1.05), duration: 800.ms, curve: Curves.easeInOut)
+             .then(delay: 800.ms)
+             .fadeOut(duration: 300.ms),
+            const SizedBox(width: 20),
+            const Icon(Icons.arrow_forward_rounded, color: AppColors.textSecondary, size: 20)
+                .animate(onPlay: (c) => c.repeat())
+                .slideX(begin: -0.5, end: 0.5, duration: 800.ms)
+                .fadeIn(duration: 200.ms)
+                .then(delay: 800.ms)
+                .fadeOut(duration: 300.ms),
+            const SizedBox(width: 20),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceLight,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.textPrimary, width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.lock, color: AppColors.textPrimary, size: 16)
+                      .animate(onPlay: (c) => c.repeat())
+                      .swap(
+                        builder: (context, child) => const Icon(LucideIcons.unlock, color: Colors.green, size: 16),
+                        delay: 800.ms,
+                      ),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.arrow_upward_rounded, color: AppColors.textPrimary, size: 16),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeflectorAnimation() {
+    return Container(
+      height: 100,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFAA00),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFFAA00).withValues(alpha: 0.3),
+                  blurRadius: 8,
+                ),
+              ],
+            ),
+            child: const Center(
+              child: Icon(
+                Icons.arrow_upward_rounded,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+          ),
+          Positioned(
+            child: Container(
+              width: 14,
+              height: 14,
+              decoration: const BoxDecoration(
+                color: AppColors.accent,
+                shape: BoxShape.circle,
+              ),
+            ).animate(onPlay: (c) => c.repeat())
+             .custom(
+               duration: 1.2.seconds,
+               builder: (context, val, child) {
+                 double dx = 0;
+                 double dy = 0;
+                 if (val < 0.5) {
+                   dx = 60 * (1 - val * 2);
+                   dy = 0;
+                 } else {
+                   dx = 0;
+                   dy = -60 * ((val - 0.5) * 2);
+                 }
+                 return Transform.translate(
+                   offset: Offset(dx, dy),
+                   child: child,
+                 );
+               },
+             ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Top Bar ─────────────────────────────────────────────────────────────────
@@ -369,7 +620,7 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 95,
+      height: 115,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Stack(
         fit: StackFit.expand,
