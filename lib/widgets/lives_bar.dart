@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'wavy_heart.dart';
 
 class LivesBar extends StatelessWidget {
   final int lives;
@@ -14,18 +14,15 @@ class LivesBar extends StatelessWidget {
       children: List.generate(maxLives, (i) {
         final isFull = i < lives;
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 3),
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
-            child: Opacity(
-              key: ValueKey('droplet_${i}_$isFull'),
-              opacity: isFull ? 1.0 : 0.22,
-              child: const Icon(
-                LucideIcons.droplet,
-                color: Color(0xFF3498DB),
-                size: 24,
-              ),
+            duration: const Duration(milliseconds: 350),
+            transitionBuilder: (child, anim) =>
+                ScaleTransition(scale: anim, child: child),
+            child: WavyHeart(
+              key: ValueKey('heart_${i}_$isFull'),
+              isFull: isFull,
+              size: 26,
             ),
           ),
         );

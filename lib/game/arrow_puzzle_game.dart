@@ -11,7 +11,7 @@ import 'game_state.dart';
 class ArrowPuzzleGame extends FlameGame {
   // ── State ─────────────────────────────────────────────────────────────────────
   final LevelModel level;
-  late GameState gameState;
+  final GameState gameState;
   GridComponent? gridComponent;
 
   // ── Callbacks to Flutter ──────────────────────────────────────────────────────
@@ -21,6 +21,7 @@ class ArrowPuzzleGame extends FlameGame {
 
   ArrowPuzzleGame({
     required this.level,
+    required this.gameState,
     required this.onLevelComplete,
     required this.onGameOver,
     required this.onLifeLost,
@@ -31,13 +32,6 @@ class ArrowPuzzleGame extends FlameGame {
 
   @override
   Future<void> onLoad() async {
-    gameState = GameState(
-      level: level,
-      onLevelComplete: onLevelComplete,
-      onGameOver: onGameOver,
-      onLifeLost: onLifeLost,
-    );
-
     final levelType = AppConstants.levelTypeFor(level.levelNumber);
     final scale = AppConstants.canvasScaleForType(levelType);
 

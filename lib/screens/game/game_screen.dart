@@ -28,11 +28,13 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen> {
   late LevelModel _level;
   late ArrowPuzzleGame _game;
+  GameState? _gameState;
   late ConfettiController _confettiController;
   bool _showingGameOver = false;
   bool _showingComplete = false;
   int _lives = AppConstants.maxLives;
   int? _loadedLevelNum;
+
 
   @override
   void initState() {
@@ -61,17 +63,35 @@ class _GameScreenState extends State<GameScreen> {
     _lives = AppConstants.maxLives;
     _showingGameOver = false;
     _showingComplete = false;
+
+    _gameState?.removeListener(_onGameStateChanged);
+    _gameState = GameState(
+      level: _level,
+      onLevelComplete: _onLevelComplete,
+      onGameOver: _onGameOver,
+      onLifeLost: _onLifeLost,
+    );
+    _gameState!.addListener(_onGameStateChanged);
+
     _game = ArrowPuzzleGame(
       level: _level,
+      gameState: _gameState!,
       onLevelComplete: _onLevelComplete,
       onGameOver: _onGameOver,
       onLifeLost: _onLifeLost,
     );
   }
 
+  void _onGameStateChanged() {
+    if (!mounted) return;
+    setState(() {
+      _lives = _gameState!.lives;
+    });
+  }
+
   void _onLifeLost() {
     if (!mounted) return;
-    setState(() => _lives = _game.gameState.lives);
+    setState(() => _lives = _gameState!.lives);
     if (context.read<ProgressRepository>().vibrationEnabled) {
       HapticFeedback.heavyImpact();
     }
@@ -87,8 +107,8 @@ class _GameScreenState extends State<GameScreen> {
 
     final progress = context.read<ProgressRepository>();
     final adManager = context.read<AdManager>();
-    final stars = ProgressRepository.calculateStars(_game.gameState.livesLost,
-        _level.totalArrows, _game.gameState.movesUsed);
+    final stars = ProgressRepository.calculateStars(_gameState!.livesLost,
+        _level.totalArrows, _gameState!.movesUsed);
     final score =
         AppConstants.baseScore + (_lives * AppConstants.bonusPerRemainingLife);
 
@@ -96,8 +116,8 @@ class _GameScreenState extends State<GameScreen> {
       levelNumber: _level.levelNumber,
       stars: stars,
       score: score,
-      movesUsed: _game.gameState.movesUsed,
-      livesLost: _game.gameState.livesLost,
+      movesUsed: _gameState!.movesUsed,
+      livesLost: _gameState!.livesLost,
       completed: true,
       completedAt: DateTime.now(),
     ));
@@ -188,8 +208,8 @@ class _GameScreenState extends State<GameScreen> {
             onRewarded: () {
               setState(() {
                 _showingGameOver = false;
-                _game.gameState.restoreLife();
-                _lives = _game.gameState.lives;
+                _gameState!.restoreLife();
+                _lives = _gameState!.lives;
               });
             },
             onDismissed: () {},
@@ -213,6 +233,7 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   void dispose() {
+    _gameState?.removeListener(_onGameStateChanged);
     _confettiController.dispose();
     super.dispose();
   }
@@ -221,6 +242,14 @@ class _GameScreenState extends State<GameScreen> {
   Widget build(BuildContext context) {
     final levelType = AppConstants.levelTypeFor(_level.levelNumber);
     final adManager = context.read<AdManager>();
+
+    // Calculate level progress
+    final totalArrows = _level.arrows.length;
+    final remainingArrows = _gameState?.arrows.length ?? totalArrows;
+    final clearedArrows = totalArrows - remainingArrows;
+    final progressVal = totalArrows > 0
+        ? (clearedArrows / totalArrows).clamp(0.0, 1.0)
+        : 0.0;
 
     return Scaffold(
       body: Container(
@@ -233,6 +262,7 @@ class _GameScreenState extends State<GameScreen> {
                 level: _level,
                 levelType: levelType,
                 lives: _lives,
+                progress: progressVal,
                 onBack: () {
                   if (Navigator.canPop(context)) {
                     Navigator.pop(context);
@@ -311,6 +341,7 @@ class _TopBar extends StatelessWidget {
   final LevelModel level;
   final LevelType levelType;
   final int lives;
+  final double progress;
   final VoidCallback onBack;
   final VoidCallback onSettings;
 
@@ -318,93 +349,116 @@ class _TopBar extends StatelessWidget {
     required this.level,
     required this.levelType,
     required this.lives,
+    required this.progress,
     required this.onBack,
     required this.onSettings,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
+    return Container(
+      height: 70,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Stack(
+        alignment: Alignment.center,
         children: [
-          // Back
-          GestureDetector(
-            onTap: onBack,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceLight,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(LucideIcons.arrowLeft,
-                  color: AppColors.textPrimary, size: 18),
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // Level info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                if (levelType.isSpecial)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        levelType == LevelType.god
-                            ? LucideIcons.flame
-                            : LucideIcons.zap,
+          // Center aligned Level Info & Progress Bar
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (levelType.isSpecial)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      levelType == LevelType.god
+                          ? LucideIcons.flame
+                          : LucideIcons.zap,
+                      color: levelType == LevelType.god
+                          ? AppColors.accent
+                          : AppColors.accentOrange,
+                      size: 11,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      levelType.label.toUpperCase(),
+                      style: GoogleFonts.nunito(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
                         color: levelType == LevelType.god
                             ? AppColors.accent
                             : AppColors.accentOrange,
-                        size: 12,
+                        letterSpacing: 1.5,
                       ),
-                      const SizedBox(width: 4),
-                      Text(levelType.label,
-                          style: GoogleFonts.nunito(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: levelType == LevelType.god
-                                ? AppColors.accent
-                                : AppColors.accentOrange,
-                            letterSpacing: 1.5,
-                          )),
-                    ],
+                    ),
+                  ],
+                ),
+              Text(
+                'Level ${level.levelNumber}',
+                style: GoogleFonts.nunito(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 5),
+              // Level progress bar with rounded corners
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(
+                  width: 100,
+                  height: 6,
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: AppColors.surfaceLight,
+                    valueColor:
+                        const AlwaysStoppedAnimation<Color>(AppColors.primary),
                   ),
-                Text('Level ${level.levelNumber}',
-                    style: GoogleFonts.nunito(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    )),
-                if (level.patternName.isNotEmpty)
-                  Text(level.patternName.replaceAll('_', ' ').toUpperCase(),
-                      style: GoogleFonts.nunito(
-                        fontSize: 10,
-                        color: AppColors.textMuted,
-                        letterSpacing: 2,
-                      )),
-              ],
+                ),
+              ),
+            ],
+          ),
+
+          // Left aligned Back button
+          Align(
+            alignment: Alignment.centerLeft,
+            child: GestureDetector(
+              onTap: onBack,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceLight,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(LucideIcons.arrowLeft,
+                    color: AppColors.textPrimary, size: 18),
+              ),
             ),
           ),
 
-          // Lives
-          LivesBar(lives: lives, maxLives: AppConstants.maxLives),
-          const SizedBox(width: 10),
-
-          // Settings
-          GestureDetector(
-            onTap: onSettings,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceLight,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(LucideIcons.settings,
-                  color: AppColors.textPrimary, size: 18),
+          // Right aligned LivesBar & Settings
+          Align(
+            alignment: Alignment.centerRight,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LivesBar(lives: lives, maxLives: AppConstants.maxLives),
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: onSettings,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceLight,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(LucideIcons.settings,
+                        color: AppColors.textPrimary, size: 18),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
