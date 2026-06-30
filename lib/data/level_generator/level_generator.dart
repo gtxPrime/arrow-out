@@ -99,9 +99,13 @@ class LevelGenerator {
       int medCount = 0;
       final int maxFailures = type == LevelType.tutorial ? 60 : 100;
       
+      // We allow up to 2 blocked cells for large grids, or 1 for small grids.
+      // Tutorial levels require clean, clear paths (0 blocks).
+      final int maxAllowedBlocks = (type == LevelType.tutorial) ? 0 : (gridSize > 15 ? 2 : 1);
+
       while (failures < maxFailures &&
           (fillEntireGrid ? occupiedPacked.length < mask.length : arrows.length < targetCount)) {
-        final candidates = _exitCandidates(maskCells, occupiedPacked, gridSize);
+        final candidates = _exitCandidates(maskCells, occupiedPacked, gridSize, maxAllowedBlocks);
         if (candidates.isEmpty) break;
 
         _shuffleCandidatesFromCenter(candidates, gridSize, rng);
@@ -214,11 +218,15 @@ class LevelGenerator {
     //  PHASE 3: Length-2 pair-sweep (spatially distributed, no clustering)
     // ═══════════════════════════════════════════════════════════════════════
     if (type != LevelType.tutorial && occupied.length < mask.length) {
+      // We allow up to 2 blocked cells for large grids, or 1 for small grids.
+      // Tutorial levels require clean, clear paths (0 blocks).
+      final int maxAllowedBlocks = (type == LevelType.tutorial) ? 0 : (gridSize > 15 ? 2 : 1);
+
       // First try exit-constrained length-2 arrows
       {
         int failures = 0;
         while (failures < 60 && occupied.length < mask.length) {
-          final candidates = _exitCandidates(maskCells, occupiedPacked, gridSize);
+          final candidates = _exitCandidates(maskCells, occupiedPacked, gridSize, maxAllowedBlocks);
           if (candidates.isEmpty) break;
 
           _shuffleCandidatesFromCenter(candidates, gridSize, rng);
@@ -568,10 +576,13 @@ class LevelGenerator {
     final centerRow = gridSize / 2;
     final centerCol = gridSize / 2;
     candidates.sort((a, b) {
+      // Combine distance from center and blocked count.
+      // Prefer fewer blocked cells first, but allow center-bias to win
+      // if the difference in blocks is small.
       final distA = (a.row - centerRow).abs() + (a.col - centerCol).abs();
       final distB = (b.row - centerRow).abs() + (b.col - centerCol).abs();
-      final scoreA = distA + (rng.nextDouble() * 3.0 - 1.5);
-      final scoreB = distB + (rng.nextDouble() * 3.0 - 1.5);
+      final scoreA = distA + a.blockedCount * 3.0 + (rng.nextDouble() * 3.0 - 1.5);
+      final scoreB = distB + b.blockedCount * 3.0 + (rng.nextDouble() * 3.0 - 1.5);
       return scoreA.compareTo(scoreB);
     });
   }
@@ -579,9 +590,10 @@ class LevelGenerator {
   // ── Find valid arrow-head candidates ────────────────────────────────────────
 
   /// Returns all (row, col, dir) triples where an arrow head can be placed:
-  /// the cell is in the mask and unoccupied, AND the entire path in [dir] from the head
-  /// to the edge is completely unoccupied (empty) at the moment of placement.
-  static List<_Cand> _exitCandidates(List<List<int>> maskCells, Set<int> occupiedPacked, int gridSize) {
+  /// the cell is in the mask and unoccupied, AND the path in [dir] from the head
+  /// to the edge crosses at most [maxAllowedBlocks] occupied cells at placement time.
+  static List<_Cand> _exitCandidates(
+      List<List<int>> maskCells, Set<int> occupiedPacked, int gridSize, int maxAllowedBlocks) {
     final out = <_Cand>[];
     for (final cell in maskCells) {
       final r = cell[0], c = cell[1];
@@ -590,18 +602,17 @@ class LevelGenerator {
         final d = dir.delta;
         int nr = r + d[0];
         int nc = c + d[1];
-        bool pathValid = true;
-        // Walk to the edge of the physical grid — must be completely unoccupied (empty)
+        int blockedCount = 0;
+        // Walk to the edge of the physical grid — count how many occupied cells we cross
         while (nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize) {
           if (occupiedPacked.contains(nr * 1000 + nc)) {
-            pathValid = false;
-            break;
+            blockedCount++;
           }
           nr += d[0];
           nc += d[1];
         }
-        if (pathValid) {
-          out.add(_Cand(r, c, dir));
+        if (blockedCount <= maxAllowedBlocks) {
+          out.add(_Cand(r, c, dir, blockedCount: blockedCount));
         }
       }
     }
@@ -1185,7 +1196,8 @@ class LevelGenerator {
 class _Cand {
   final int row, col;
   final ArrowDirection dir;
-  _Cand(this.row, this.col, this.dir);
+  final int blockedCount;
+  _Cand(this.row, this.col, this.dir, {this.blockedCount = 0});
 }
 
 class _Params {

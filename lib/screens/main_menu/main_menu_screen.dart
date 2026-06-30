@@ -4,12 +4,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/constants.dart';
 import '../../data/repositories/progress_repository.dart';
 import '../../data/repositories/level_repository.dart';
 import '../../data/models/level.dart';
+import '../../ads/ad_manager.dart';
 
 class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
@@ -55,6 +57,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   @override
   Widget build(BuildContext context) {
     final progress = context.watch<ProgressRepository>();
+    final adManager = context.read<AdManager>();
 
     return Scaffold(
       body: Container(
@@ -160,6 +163,23 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
               _buildBigPlayButton(context, progress),
 
               const Spacer(flex: 3),
+
+              // ── Banner Ad ──────────────────────────────────────────────────
+              if (adManager.homeBannerAd != null)
+                Container(
+                  alignment: Alignment.center,
+                  width: double.infinity,
+                  height: 50,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: SizedBox(
+                    width: 320,
+                    height: 50,
+                    child: AdWidget(
+                      key: const ValueKey('home_banner_ad'),
+                      ad: adManager.homeBannerAd!,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

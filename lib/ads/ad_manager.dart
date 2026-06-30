@@ -1,4 +1,5 @@
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'dart:async';
 import '../core/constants.dart';
 
 /// Central ad orchestrator — manages banner, interstitial, and rewarded ads.
@@ -14,33 +15,54 @@ class AdManager {
   bool _isRewardedLoaded = false;
 
   // ── Banner ────────────────────────────────────────────────────────────────────
-  BannerAd? _bannerAd;
-  bool _isBannerLoaded = false;
+  BannerAd? _gameBannerAd;
+  bool _isGameBannerLoaded = false;
+
+  BannerAd? _homeBannerAd;
+  bool _isHomeBannerLoaded = false;
 
   void initialize() {
     _loadInterstitial();
     _loadRewarded();
-    _loadBanner();
+    _loadGameBanner();
+    _loadHomeBanner();
   }
 
   // ── Banner ────────────────────────────────────────────────────────────────────
 
-  void _loadBanner() {
-    _bannerAd = BannerAd(
+  void _loadGameBanner() {
+    _gameBannerAd = BannerAd(
       adUnitId: AppConstants.admobBannerUnitId,
       size: AdSize.banner,
       request: const AdRequest(),
       listener: BannerAdListener(
-        onAdLoaded: (_) => _isBannerLoaded = true,
+        onAdLoaded: (_) => _isGameBannerLoaded = true,
         onAdFailedToLoad: (ad, error) {
           ad.dispose();
-          _bannerAd = null;
+          _gameBannerAd = null;
         },
       ),
     )..load();
   }
 
-  BannerAd? get bannerAd => _isBannerLoaded ? _bannerAd : null;
+  void _loadHomeBanner() {
+    _homeBannerAd = BannerAd(
+      adUnitId: AppConstants.admobBannerUnitId,
+      size: AdSize.banner,
+      request: const AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (_) => _isHomeBannerLoaded = true,
+        onAdFailedToLoad: (ad, error) {
+          ad.dispose();
+          _homeBannerAd = null;
+        },
+      ),
+    )..load();
+  }
+
+  BannerAd? get gameBannerAd => _isGameBannerLoaded ? _gameBannerAd : null;
+  BannerAd? get homeBannerAd => _isHomeBannerLoaded ? _homeBannerAd : null;
+  BannerAd? get bannerAd => gameBannerAd; // Keep for compatibility
 
   // ── Interstitial ──────────────────────────────────────────────────────────────
 
@@ -72,20 +94,24 @@ class AdManager {
 
   Future<void> showInterstitial() async {
     if (!_isInterstitialLoaded || _interstitialAd == null) return;
+    final completer = Completer<void>();
     _levelsSinceLastInterstitial = 0;
     _interstitialAd!.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) {
         ad.dispose();
         _isInterstitialLoaded = false;
         _loadInterstitial(); // Pre-load next one
+        if (!completer.isCompleted) completer.complete();
       },
       onAdFailedToShowFullScreenContent: (ad, error) {
         ad.dispose();
         _isInterstitialLoaded = false;
         _loadInterstitial();
+        if (!completer.isCompleted) completer.complete();
       },
     );
     await _interstitialAd!.show();
+    return completer.future;
   }
 
   // ── Rewarded ──────────────────────────────────────────────────────────────────
@@ -139,7 +165,8 @@ class AdManager {
   }
 
   void dispose() {
-    _bannerAd?.dispose();
+    _gameBannerAd?.dispose();
+    _homeBannerAd?.dispose();
     _interstitialAd?.dispose();
     _rewardedAd?.dispose();
   }

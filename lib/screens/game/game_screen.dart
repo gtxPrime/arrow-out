@@ -182,6 +182,29 @@ class _GameScreenState extends State<GameScreen> {
     });
   }
 
+  Future<void> _handleRestart() async {
+    final totalArrows = _level.arrows.length;
+    final activeArrows =
+        _gameState?.arrows.where((a) => a.state != ArrowState.sliding).length ??
+            totalArrows;
+    final clearedArrows = totalArrows - activeArrows;
+    final progressVal =
+        totalArrows > 0 ? (clearedArrows / totalArrows).clamp(0.0, 1.0) : 0.0;
+
+    if (progressVal >= 0.8) {
+      final adManager = context.read<AdManager>();
+      await adManager.showInterstitial();
+    }
+
+    if (mounted) {
+      setState(() {
+        _showingGameOver = false;
+        _game.resetLevel();
+        _lives = AppConstants.maxLives;
+      });
+    }
+  }
+
   Future<void> _showSettingsDialog() async {
     await showDialog(
       context: context,
@@ -189,11 +212,7 @@ class _GameScreenState extends State<GameScreen> {
       builder: (_) => _GameSettingsDialog(
         onRestart: () {
           Navigator.pop(context);
-          setState(() {
-            _showingGameOver = false;
-            _game.resetLevel();
-            _lives = AppConstants.maxLives;
-          });
+          _handleRestart();
         },
       ),
     );
@@ -258,11 +277,7 @@ class _GameScreenState extends State<GameScreen> {
         },
         onRestart: () {
           Navigator.pop(context);
-          setState(() {
-            _showingGameOver = false;
-            _game.resetLevel();
-            _lives = AppConstants.maxLives;
-          });
+          _handleRestart();
         },
         onMenu: () {
           Navigator.pop(context);
@@ -372,7 +387,7 @@ class _GameScreenState extends State<GameScreen> {
               ),
 
               // ── Banner Ad (centered and sized to avoid layout warnings) ──
-              if (adManager.bannerAd != null)
+              if (adManager.gameBannerAd != null)
                 Container(
                   alignment: Alignment.center,
                   width: double.infinity,
@@ -381,8 +396,8 @@ class _GameScreenState extends State<GameScreen> {
                     width: 320,
                     height: 50,
                     child: AdWidget(
-                      key: UniqueKey(),
-                      ad: adManager.bannerAd!,
+                      key: const ValueKey('game_banner_ad'),
+                      ad: adManager.gameBannerAd!,
                     ),
                   ),
                 ),
