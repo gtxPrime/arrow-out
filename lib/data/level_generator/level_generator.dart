@@ -847,7 +847,7 @@ class LevelGenerator {
         final lockClear = _simulateExitClear(arrowLock, gridSize, occupiedWithoutKey, orphanMap);
 
         if (keyClear && lockClear) {
-          arrows[ki] = arrows[ki].copyWith(mechanic: SnakeMechanic.colorKey, colorGroup: actualPairs);
+          arrows[ki] = arrows[ki].copyWith(mechanic: SnakeMechanic.colorLock, colorGroup: actualPairs);
           arrows[li] = arrows[li].copyWith(mechanic: SnakeMechanic.colorLock, colorGroup: actualPairs);
           actualPairs++;
           break; // Move to find a pair for the next standard arrow

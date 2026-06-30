@@ -355,9 +355,9 @@ class _GameScreenState extends State<GameScreen> {
   void _showTutorialDialogIfNeeded(int levelNum) {
     if (levelNum == 2) {
       _showTutorialDialog(
-        title: 'Color Locked Arrows',
-        description: 'Arrows with a matching color and keyhole lock each other! Tap the color key arrow first to unlock the path, and then you can clear the other color locked arrow.',
-        icon: LucideIcons.key,
+        title: 'Color Paired Arrows',
+        description: 'Arrows with matching colors are paired together! Tap on either arrow in the pair, and both will slide out together simultaneously. Make sure both exit paths are clear!',
+        icon: LucideIcons.coins,
         iconColor: const Color(0xFFFF2D55),
         animationWidget: _buildColorLockAnimation(),
       );
@@ -480,6 +480,7 @@ class _GameScreenState extends State<GameScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // First paired arrow
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
@@ -487,45 +488,27 @@ class _GameScreenState extends State<GameScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFFFF2D55), width: 1.5),
               ),
-              child: Row(
-                children: [
-                  const Icon(LucideIcons.key, color: Color(0xFFFF2D55), size: 16),
-                  const SizedBox(width: 6),
-                  const Icon(Icons.arrow_upward_rounded, color: Color(0xFFFF2D55), size: 16),
-                ],
-              ),
+              child: const Icon(Icons.arrow_upward_rounded, color: Color(0xFFFF2D55), size: 18),
             ).animate(onPlay: (c) => c.repeat())
-             .scale(begin: const Offset(0.9, 0.9), end: const Offset(1.05, 1.05), duration: 800.ms, curve: Curves.easeInOut)
-             .then(delay: 800.ms)
-             .fadeOut(duration: 300.ms),
-            const SizedBox(width: 20),
-            const Icon(Icons.arrow_forward_rounded, color: AppColors.textSecondary, size: 20)
-                .animate(onPlay: (c) => c.repeat())
-                .slideX(begin: -0.5, end: 0.5, duration: 800.ms)
-                .fadeIn(duration: 200.ms)
-                .then(delay: 800.ms)
-                .fadeOut(duration: 300.ms),
-            const SizedBox(width: 20),
+             .scale(begin: const Offset(0.9, 0.9), end: const Offset(1.03, 1.03), duration: 800.ms, curve: Curves.easeInOut)
+             .slideY(begin: 0, end: -1.2, delay: 1000.ms, duration: 600.ms)
+             .fadeOut(delay: 1000.ms, duration: 200.ms),
+
+            const SizedBox(width: 32),
+
+            // Second paired arrow (exits at the same time!)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.surfaceLight,
+                color: const Color(0xFFFF2D55).withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.textPrimary, width: 1.5),
+                border: Border.all(color: const Color(0xFFFF2D55), width: 1.5),
               ),
-              child: Row(
-                children: [
-                  const Icon(LucideIcons.lock, color: AppColors.textPrimary, size: 16)
-                      .animate(onPlay: (c) => c.repeat())
-                      .swap(
-                        builder: (context, child) => const Icon(LucideIcons.unlock, color: Colors.green, size: 16),
-                        delay: 800.ms,
-                      ),
-                  const SizedBox(width: 6),
-                  const Icon(Icons.arrow_upward_rounded, color: AppColors.textPrimary, size: 16),
-                ],
-              ),
-            ),
+              child: const Icon(Icons.arrow_upward_rounded, color: Color(0xFFFF2D55), size: 18),
+            ).animate(onPlay: (c) => c.repeat())
+             .scale(begin: const Offset(0.9, 0.9), end: const Offset(1.03, 1.03), duration: 800.ms, curve: Curves.easeInOut)
+             .slideY(begin: 0, end: -1.2, delay: 1000.ms, duration: 600.ms)
+             .fadeOut(delay: 1000.ms, duration: 200.ms),
           ],
         ),
       ),

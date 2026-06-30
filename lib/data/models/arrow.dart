@@ -79,11 +79,8 @@ enum SnakeMechanic {
   /// No extra rule — base pull-through mechanic.
   standard,
 
-  /// Cannot be cleared until its matching colorKey snake has been cleared.
+  /// Color paired arrows that exit together.
   colorLock,
-
-  /// When cleared, unlocks all colorLock snakes in the same colorGroup.
-  colorKey,
 
   /// Requires two successful (non-blocked) taps: first cracks, second clears.
   iceSegment,
