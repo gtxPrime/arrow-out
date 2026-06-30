@@ -137,20 +137,46 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
 
               const Spacer(flex: 2),
 
-              // ── Center Title "Amaze GO!" ───────────────────────────────────
-              Text(
-                'Amaze GO!',
-                style: GoogleFonts.nunito(
-                  fontSize: 46,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.textPrimary,
-                  letterSpacing: 1.5,
-                ),
-              ).animate().scale(
-                  begin: const Offset(0.9, 0.9),
-                  end: const Offset(1.0, 1.0),
-                  duration: 500.ms,
-                  curve: Curves.elasticOut),
+              // ── Center Title "ARROW OUT" with Premium Floating Icons ──
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _ArrowIcon(iconData: LucideIcons.arrowLeft, color: AppColors.arrowLeft, delay: 0)
+                          .animate(onPlay: (controller) => controller.repeat(reverse: true))
+                          .slideY(begin: 0, end: -0.15, duration: 1200.ms, curve: Curves.easeInOut),
+                      _ArrowIcon(iconData: LucideIcons.arrowUp, color: AppColors.arrowUp, delay: 100)
+                          .animate(onPlay: (controller) => controller.repeat(reverse: true))
+                          .slideY(begin: 0, end: -0.15, duration: 1200.ms, curve: Curves.easeInOut, delay: 200.ms),
+                      _ArrowIcon(iconData: LucideIcons.arrowRight, color: AppColors.arrowRight, delay: 200)
+                          .animate(onPlay: (controller) => controller.repeat(reverse: true))
+                          .slideY(begin: 0, end: -0.15, duration: 1200.ms, curve: Curves.easeInOut, delay: 400.ms),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'ARROW OUT',
+                    style: GoogleFonts.nunito(
+                      fontSize: 44,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.textPrimary,
+                      letterSpacing: 3,
+                      shadows: [
+                        Shadow(
+                          color: AppColors.primary.withValues(alpha: 0.8),
+                          blurRadius: 24,
+                        ),
+                      ],
+                    ),
+                  ).animate().scale(
+                      begin: const Offset(0.9, 0.9),
+                      end: const Offset(1.0, 1.0),
+                      duration: 500.ms,
+                      curve: Curves.elasticOut),
+                ],
+              ),
 
               const Spacer(flex: 2),
 
@@ -314,11 +340,11 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 )
               else
                 const Icon(
-                  Icons.play_arrow_rounded,
+                  LucideIcons.play,
                   color: Colors.white,
-                  size: 32,
+                  size: 26,
                 ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -353,5 +379,44 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
          curve: Curves.easeInOut,
        ),
     );
+  }
+}
+
+class _ArrowIcon extends StatelessWidget {
+  final IconData iconData;
+  final Color color;
+  final int delay;
+
+  const _ArrowIcon(
+      {required this.iconData, required this.color, required this.delay});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 52,
+      height: 52,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
+        boxShadow: [
+          BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 12)
+        ],
+      ),
+      child: Center(
+        child: Icon(
+          iconData,
+          color: color,
+          size: 28,
+        ),
+      ),
+    )
+        .animate(delay: Duration(milliseconds: delay))
+        .fadeIn(duration: 400.ms)
+        .scale(
+            begin: const Offset(0, 0),
+            end: const Offset(1, 1),
+            curve: Curves.elasticOut);
   }
 }

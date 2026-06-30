@@ -214,3 +214,10 @@ Also update the `<meta-data>` in [AndroidManifest.xml](file:///f:/Source%20Codes
 ### Unity & Facebook Ads Mediation
 - **Facebook Audience Network:** Set up your adapter through your AdMob Mediation setup. No extra code changes needed.
 - **Unity Ads:** Get your Game ID from the Unity Dashboard, then update `AppConstants.unityGameId` and set `unityTestMode = false`.
+
+---
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=gtxPrime/arrow-out&type=Date)](https://star-history.com/#gtxPrime/arrow-out&Date)
+

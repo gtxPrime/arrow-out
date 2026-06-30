@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/app_colors.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -158,13 +159,19 @@ class _SplashScreenState extends State<SplashScreen>
   Widget _buildLogo() {
     return Column(
       children: [
-        // Arrow icon cluster
+        // Arrow icon cluster with smooth floating animation
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _ArrowIcon(direction: '←', color: AppColors.arrowLeft, delay: 0),
-            _ArrowIcon(direction: '↑', color: AppColors.arrowUp, delay: 100),
-            _ArrowIcon(direction: '→', color: AppColors.arrowRight, delay: 200),
+            _ArrowIcon(iconData: LucideIcons.arrowLeft, color: AppColors.arrowLeft, delay: 0)
+                .animate(onPlay: (controller) => controller.repeat(reverse: true))
+                .slideY(begin: 0, end: -0.15, duration: 1200.ms, curve: Curves.easeInOut),
+            _ArrowIcon(iconData: LucideIcons.arrowUp, color: AppColors.arrowUp, delay: 100)
+                .animate(onPlay: (controller) => controller.repeat(reverse: true))
+                .slideY(begin: 0, end: -0.15, duration: 1200.ms, curve: Curves.easeInOut, delay: 200.ms),
+            _ArrowIcon(iconData: LucideIcons.arrowRight, color: AppColors.arrowRight, delay: 200)
+                .animate(onPlay: (controller) => controller.repeat(reverse: true))
+                .slideY(begin: 0, end: -0.15, duration: 1200.ms, curve: Curves.easeInOut, delay: 400.ms),
           ],
         ),
         const SizedBox(height: 16),
@@ -192,12 +199,12 @@ class _SplashScreenState extends State<SplashScreen>
 }
 
 class _ArrowIcon extends StatelessWidget {
-  final String direction;
+  final IconData iconData;
   final Color color;
   final int delay;
 
   const _ArrowIcon(
-      {required this.direction, required this.color, required this.delay});
+      {required this.iconData, required this.color, required this.delay});
 
   @override
   Widget build(BuildContext context) {
@@ -214,9 +221,10 @@ class _ArrowIcon extends StatelessWidget {
         ],
       ),
       child: Center(
-        child: Text(
-          direction,
-          style: TextStyle(fontSize: 26, color: color),
+        child: Icon(
+          iconData,
+          color: color,
+          size: 28,
         ),
       ),
     )
