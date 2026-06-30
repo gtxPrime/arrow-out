@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/arrow_line.dart';
+import '../../widgets/maze_background.dart';
 import '../../data/models/arrow.dart';
 import '../../core/app_colors.dart';
 
@@ -51,12 +52,20 @@ class _SplashScreenState extends State<SplashScreen>
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: AppColors.bgGradient),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Arrow icons
-              _ArrowsBackground(),
+        child: Stack(
+          children: [
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: BlendedMazeBackground(height: 380),
+            ),
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Arrow icons
+                  _ArrowsBackground(),
               const SizedBox(height: 32),
 
               // Logo
@@ -150,8 +159,10 @@ class _SplashScreenState extends State<SplashScreen>
                   ],
                 ),
               ).animate(delay: 800.ms).fadeIn(duration: 500.ms),
-            ],
-          ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -164,13 +175,13 @@ class _SplashScreenState extends State<SplashScreen>
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ArrowLine(direction: ArrowDirection.left, color: AppColors.arrowLeft, size: 52, strokeWidth: 6)
+            ArrowLine(direction: ArrowDirection.left, color: AppColors.accentGold, size: 52, strokeWidth: 6)
                 .animate(onPlay: (controller) => controller.repeat(reverse: true))
                 .slideY(begin: 0, end: -0.15, duration: 1200.ms, curve: Curves.easeInOut),
-            ArrowLine(direction: ArrowDirection.up, color: AppColors.arrowUp, size: 52, strokeWidth: 6)
+            ArrowLine(direction: ArrowDirection.up, color: AppColors.accentOrange, size: 52, strokeWidth: 6)
                 .animate(onPlay: (controller) => controller.repeat(reverse: true))
                 .slideY(begin: 0, end: -0.15, duration: 1200.ms, curve: Curves.easeInOut, delay: 200.ms),
-            ArrowLine(direction: ArrowDirection.right, color: AppColors.arrowRight, size: 52, strokeWidth: 6)
+            ArrowLine(direction: ArrowDirection.right, color: AppColors.accentGreen, size: 52, strokeWidth: 6)
                 .animate(onPlay: (controller) => controller.repeat(reverse: true))
                 .slideY(begin: 0, end: -0.15, duration: 1200.ms, curve: Curves.easeInOut, delay: 400.ms),
           ],
@@ -185,8 +196,9 @@ class _SplashScreenState extends State<SplashScreen>
             letterSpacing: 4,
             shadows: [
               Shadow(
-                color: AppColors.primary.withValues(alpha: 0.8),
-                blurRadius: 24,
+                color: AppColors.accentGold.withValues(alpha: 0.15),
+                offset: const Offset(0, 2),
+                blurRadius: 4,
               ),
             ],
           ),
