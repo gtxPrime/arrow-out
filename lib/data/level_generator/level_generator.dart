@@ -372,8 +372,15 @@ class LevelGenerator {
     if (arrows.isEmpty) return null;
 
     final emptyCount = mask.length - occupied.length;
-    final double maxOrphansPct = (gridSize > 20) ? 0.16 : 0.22;
-    final maxOrphans = (mask.length * maxOrphansPct).ceil().clamp(5, 150);
+    final int maxOrphans;
+    if (type == LevelType.normal && levelNumber <= 20) {
+      // Early normal levels: we want very few or 0 orphan dots
+      maxOrphans = (gridSize <= 5) ? 0 : 1;
+    } else {
+      final double maxOrphansPct = (gridSize > 20) ? 0.16 : 0.22;
+      maxOrphans = (mask.length * maxOrphansPct).ceil().clamp(5, 150);
+    }
+
     if (fillEntireGrid && emptyCount > maxOrphans) {
       return null;
     }
@@ -384,22 +391,41 @@ class LevelGenerator {
       final emptyKeys = mask.where((k) => !occupied.contains(k)).toSet();
       final orphanMap = <String, OrphanDotType>{};
 
-      // Determine color probability based on difficulty
+      // Determine color probability based on difficulty and level type
       final double colorProb;
-      if (levelNumber == 3) {
+      if (type == LevelType.god) {
+        // God levels: always high, scales with level number
+        if (levelNumber <= 20) {
+          colorProb = 0.70;
+        } else if (levelNumber <= 50) {
+          colorProb = 0.80;
+        } else {
+          colorProb = 0.90;
+        }
+      } else if (type == LevelType.boss) {
+        // Boss levels: always high, scales with level number
+        if (levelNumber <= 20) {
+          colorProb = 0.60;
+        } else if (levelNumber <= 50) {
+          colorProb = 0.70;
+        } else {
+          colorProb = 0.80;
+        }
+      } else if (levelNumber == 3) {
         colorProb = 0.60; // Colored orphan dots for tutorial level 3
       } else if (levelNumber <= 20) {
-        colorProb = 0.0; // Starting levels: all neutral
-      } else if (type == LevelType.god) {
-        colorProb = 0.85; // God levels: 85% colored
-      } else if (type == LevelType.boss) {
-        colorProb = 0.75; // Boss levels: 75% colored
-      } else if (levelNumber > 200) {
-        colorProb = 0.70; // High normal levels: 70% colored
-      } else if (levelNumber > 100) {
-        colorProb = 0.55; // Mid levels: 55% colored
+        colorProb = 0.0; // Starting normal levels: 0% colored (all neutral)
       } else {
-        colorProb = 0.40; // Early-mid levels: 40% colored
+        // Normal levels scaling with level number
+        if (levelNumber <= 50) {
+          colorProb = 0.35;
+        } else if (levelNumber <= 100) {
+          colorProb = 0.50;
+        } else if (levelNumber <= 200) {
+          colorProb = 0.65;
+        } else {
+          colorProb = 0.80;
+        }
       }
 
       // Build occupied cells set once containing all arrow cells
@@ -820,10 +846,40 @@ class LevelGenerator {
       LevelType type, Random rng, int gridSize, List<OrphanDot> orphanDots) {
     if (arrows.length < 4) return;
     int pairs = 0;
-    if (type == LevelType.god)       pairs = (arrows.length * 0.45).floor().clamp(2, 8);
-    else if (type == LevelType.boss) pairs = (arrows.length * 0.35).floor().clamp(1, 6);
-    else if (level == 2)             pairs = 1; // Exactly 1 pair for tutorial level 2
-    else if (level >= 4)             pairs = (arrows.length * 0.12).floor().clamp(0, 2);
+    if (type == LevelType.god) {
+      if (level <= 20) {
+        pairs = (arrows.length * 0.35).floor().clamp(2, 4);
+      } else if (level <= 50) {
+        pairs = (arrows.length * 0.45).floor().clamp(2, 6);
+      } else {
+        pairs = (arrows.length * 0.55).floor().clamp(3, 10);
+      }
+    } else if (type == LevelType.boss) {
+      if (level <= 20) {
+        pairs = (arrows.length * 0.25).floor().clamp(1, 3);
+      } else if (level <= 50) {
+        pairs = (arrows.length * 0.35).floor().clamp(1, 5);
+      } else {
+        pairs = (arrows.length * 0.45).floor().clamp(2, 8);
+      }
+    } else if (level == 2) {
+      pairs = 1; // Exactly 1 pair for tutorial level 2
+    } else {
+      // Normal levels: scaling difficulty
+      if (level < 15) {
+        pairs = 0;
+      } else if (level < 30) {
+        pairs = (arrows.length * 0.08).floor().clamp(0, 1);
+      } else if (level < 60) {
+        pairs = (arrows.length * 0.12).floor().clamp(0, 2);
+      } else if (level < 100) {
+        pairs = (arrows.length * 0.16).floor().clamp(1, 3);
+      } else {
+        pairs = (arrows.length * 0.22).floor().clamp(1, 6);
+      }
+    }
+
+    if (pairs == 0) return;
 
     // Build orphan dot map for exit simulation
     final orphanMap = <String, OrphanDotType>{};
@@ -831,17 +887,9 @@ class LevelGenerator {
       orphanMap[od.key] = od.type;
     }
 
-    // Build full occupied set
-    final allOccupied = <String>{};
-    for (final a in arrows) {
-      for (final pt in a.path) allOccupied.add('${pt[0]},${pt[1]}');
-    }
-
     // Collect standard arrow indices.
     // Sort by descending edge-distance of their head so that inner arrows
     // (far from the grid edge) are preferred as pair candidates.
-    // This makes pairs more interesting — both arrows tend to sit inside
-    // the canvas rather than trivially near an edge.
     final stdIndices = <int>[];
     for (int i = 0; i < arrows.length; i++) {
       if (arrows[i].mechanic == SnakeMechanic.standard) {
@@ -873,16 +921,15 @@ class LevelGenerator {
         final arrowLock = arrows[li];
         final arrowKey  = arrows[ki];
 
-        // Key must exit with Lock still present
-        final occupiedWithLock = Set<String>.from(allOccupied);
-        for (final pt in arrowKey.path) occupiedWithLock.remove('${pt[0]},${pt[1]}');
-        final keyClear = _simulateExitClear(arrowKey, gridSize, occupiedWithLock, orphanMap);
+        // Key's exit path must not cross Lock's body cells.
+        // We only check for mutual blocking (not blocked by unrelated arrows),
+        // which allows inner arrows to be paired successfully instead of failing.
+        final lockCells = arrowLock.path.map((p) => '${p[0]},${p[1]}').toSet();
+        final keyClear = _simulateExitClear(arrowKey, gridSize, lockCells, orphanMap);
 
-        // Lock must exit with Key gone
-        final occupiedWithoutKey = Set<String>.from(allOccupied);
-        for (final pt in arrowKey.path)  occupiedWithoutKey.remove('${pt[0]},${pt[1]}');
-        for (final pt in arrowLock.path) occupiedWithoutKey.remove('${pt[0]},${pt[1]}');
-        final lockClear = _simulateExitClear(arrowLock, gridSize, occupiedWithoutKey, orphanMap);
+        // Lock's exit path must not cross Key's body cells
+        final keyCells = arrowKey.path.map((p) => '${p[0]},${p[1]}').toSet();
+        final lockClear = _simulateExitClear(arrowLock, gridSize, keyCells, orphanMap);
 
         if (keyClear && lockClear) {
           arrows[ki] = arrows[ki].copyWith(mechanic: SnakeMechanic.colorLock, colorGroup: actualPairs);
