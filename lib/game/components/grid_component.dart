@@ -88,14 +88,7 @@ class GridComponent extends PositionComponent {
     final gridSize = gameState.level.gridSize;
     final cs = cellSize;
 
-    // ── Boss / God outer glow ─────────────────────────────────────────────
-    if (_levelType == LevelType.god) {
-      _glow(canvas, gridPixelSize, _godColor, 26.0, 4.0);
-      _glow(
-          canvas, gridPixelSize, _godColor.withValues(alpha: 0.35), 52.0, 2.0);
-    } else if (_levelType == LevelType.boss) {
-      _glow(canvas, gridPixelSize, _bossColor, 20.0, 2.8);
-    }
+    // Glow and outer box removed as requested for a cleaner/smoother look
 
     // ── Dot layer (drawn behind all arrows) ──────────────────────────────
     final baseDot = (cs * 0.045).clamp(0.6, 1.6);

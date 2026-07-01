@@ -14,26 +14,29 @@ class BlendedMazeBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ShaderMask(
-      shaderCallback: (rect) {
-        return const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.black,
-            Colors.transparent,
-          ],
-          stops: [0.45, 1.0],
-        ).createShader(rect);
-      },
-      blendMode: BlendMode.dstIn,
-      child: SizedBox(
-        width: double.infinity,
-        height: height,
-        child: CustomPaint(
-          painter: MazeBackgroundPainter(
-            baseColor: AppColors.textSecondary,
-            progress: progress,
+    return Opacity(
+      opacity: 0.55, // Lower the opacity of the whole mesh slightly
+      child: ShaderMask(
+        shaderCallback: (rect) {
+          return const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.black,
+              Colors.transparent,
+            ],
+            stops: [0.45, 1.0],
+          ).createShader(rect);
+        },
+        blendMode: BlendMode.dstIn,
+        child: SizedBox(
+          width: double.infinity,
+          height: height,
+          child: CustomPaint(
+            painter: MazeBackgroundPainter(
+              baseColor: AppColors.textSecondary,
+              progress: progress,
+            ),
           ),
         ),
       ),
@@ -175,10 +178,10 @@ class MazeBackgroundPainter extends CustomPainter {
       }
     }
 
-    // 2. Draw the generated arrow lines with slightly lowered opacity
+    // 2. Draw the generated arrow lines with full opacity (mesh arrows opaque 100%)
     for (final gp in generatedPaths) {
       final arrowPaint = Paint()
-        ..color = gp.color.withValues(alpha: 0.70) // Softened opacity
+        ..color = gp.color
         ..style = PaintingStyle.stroke
         ..strokeWidth = gp.strokeWidth
         ..strokeCap = StrokeCap.round
@@ -216,7 +219,7 @@ class MazeBackgroundPainter extends CustomPainter {
       canvas.drawPath(
         caretPath,
         Paint()
-          ..color = gp.color.withValues(alpha: 0.70) // Matching soft opacity
+          ..color = gp.color // Matching full opacity
           ..style = PaintingStyle.stroke
           ..strokeWidth = gp.strokeWidth
           ..strokeCap = StrokeCap.round

@@ -164,7 +164,6 @@ class _GameScreenState extends State<GameScreen> {
   void _onLevelComplete() {
     if (!mounted || _showingComplete) return;
     setState(() => _showingComplete = true);
-    _confettiController.play();
     if (context.read<ProgressRepository>().vibrationEnabled) {
       HapticFeedback.lightImpact();
     }
@@ -188,9 +187,20 @@ class _GameScreenState extends State<GameScreen> {
 
     final levelType = AppConstants.levelTypeFor(_level.levelNumber);
     adManager.onLevelComplete(_level.levelNumber, levelType.isSpecial);
-
+ 
     Future.delayed(const Duration(milliseconds: 1200), () {
-      if (mounted) _showLevelCompleteDialog(stars, score);
+      if (mounted) {
+        _confettiController.play();
+        if (context.read<ProgressRepository>().vibrationEnabled) {
+          Future.forEach(List.generate(6, (i) => i * 150), (delay) async {
+            await Future.delayed(Duration(milliseconds: delay == 0 ? 0 : 150));
+            if (mounted && _showingComplete) {
+              HapticFeedback.lightImpact();
+            }
+          });
+        }
+        _showLevelCompleteDialog(stars, score);
+      }
     });
   }
 
@@ -241,38 +251,86 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
+  void _handleNextLevel() {
+    Navigator.pop(context);
+    Navigator.pushReplacementNamed(
+      context,
+      '/game',
+      arguments: {'level': _level.levelNumber + 1},
+    );
+  }
+
+  void _handleMenu() {
+    Navigator.pop(context);
+    Navigator.pushReplacementNamed(context, '/menu');
+  }
+
+  void _handleDoubleCoins() {
+    final adManager = context.read<AdManager>();
+    adManager.showRewarded(
+      onRewarded: () {
+        context.read<ProgressRepository>().addCoins((AppConstants.baseScore + (_lives * AppConstants.bonusPerRemainingLife)) ~/ 10);
+        _handleNextLevel();
+      },
+      onDismissed: () => Navigator.pop(context),
+    );
+  }
+
   Future<void> _showLevelCompleteDialog(int stars, int score) async {
     await showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _LevelCompleteDialog(
-        level: _level,
-        stars: stars,
-        score: score,
-        onNextLevel: () {
-          Navigator.pop(context);
-          Navigator.pushReplacementNamed(
-            context,
-            '/game',
-            arguments: {'level': _level.levelNumber + 1},
-          );
-        },
-        onMenu: () {
-          Navigator.pop(context);
-          Navigator.pushReplacementNamed(context, '/menu');
-        },
-        onDoubleCoins: () {
-          final adManager = context.read<AdManager>();
-          adManager.showRewarded(
-            onRewarded: () {
-              context.read<ProgressRepository>().addCoins(score ~/ 10);
-              Navigator.pop(context);
-              Navigator.pushReplacementNamed(context, '/game',
-                  arguments: {'level': _level.levelNumber + 1});
-            },
-            onDismissed: () => Navigator.pop(context),
-          );
-        },
+      builder: (_) => Stack(
+        children: [
+          _LevelCompleteDialog(
+            level: _level,
+            stars: stars,
+            score: score,
+            onNextLevel: _handleNextLevel,
+            onMenu: _handleMenu,
+            onDoubleCoins: _handleDoubleCoins,
+          ),
+          // Bottom Left Confetti
+          Align(
+            alignment: Alignment.bottomLeft,
+            child: ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirection: -pi / 4,
+              emissionFrequency: 0.08,
+              numberOfParticles: 5,
+              maxBlastForce: 55,
+              minBlastForce: 25,
+              gravity: 0.15,
+              shouldLoop: false,
+              colors: const [
+                Color(0xFF5E6B56),
+                Color(0xFFA8B5A2),
+                Color(0xFFF2EFEA),
+                Colors.white,
+              ],
+            ),
+          ),
+          // Bottom Right Confetti
+          Align(
+            alignment: Alignment.bottomRight,
+            child: ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirection: -3 * pi / 4,
+              emissionFrequency: 0.08,
+              numberOfParticles: 5,
+              maxBlastForce: 55,
+              minBlastForce: 25,
+              gravity: 0.15,
+              shouldLoop: false,
+              colors: const [
+                Color(0xFF5E6B56),
+                Color(0xFFA8B5A2),
+                Color(0xFFF2EFEA),
+                Colors.white,
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -378,7 +436,7 @@ class _GameScreenState extends State<GameScreen> {
                           minScale: 0.8,
                           maxScale: 4.0,
                           boundaryMargin: const EdgeInsets.all(60),
-                          clipBehavior: Clip.hardEdge,
+                          clipBehavior: Clip.none,
                           child: Center(
                             child: SizedBox(
                               width: boardSize,
@@ -388,21 +446,6 @@ class _GameScreenState extends State<GameScreen> {
                           ),
                         ),
 
-                        // Confetti on level complete
-                        Align(
-                          alignment: Alignment.topCenter,
-                          child: ConfettiWidget(
-                            confettiController: _confettiController,
-                            blastDirectionality: BlastDirectionality.explosive,
-                            shouldLoop: false,
-                            colors: const [
-                              AppColors.primary,
-                              AppColors.accentGold,
-                              AppColors.accentGreen,
-                              AppColors.accent,
-                            ],
-                          ),
-                        ),
                       ],
                     );
                   },
@@ -469,13 +512,13 @@ class _GameScreenState extends State<GameScreen> {
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: AppColors.background,
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+              border: Border.all(color: AppColors.surfaceLight, width: 3),
               boxShadow: [
                 BoxShadow(
                   color: AppColors.primary.withValues(alpha: 0.15),
-                  blurRadius: 24,
+                  blurRadius: 32,
                 ),
               ],
             ),
@@ -836,24 +879,28 @@ class _LevelCompleteDialog extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(28),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: AppColors.background,
           borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+          border: Border.all(color: AppColors.surfaceLight, width: 3),
           boxShadow: [
             BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.3),
+                color: AppColors.primary.withValues(alpha: 0.15),
                 blurRadius: 32),
           ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('🎉', style: TextStyle(fontSize: 48)).animate().scale(
+            const Icon(
+              LucideIcons.partyPopper,
+              color: AppColors.primary,
+              size: 52,
+            ).animate().scale(
                 begin: const Offset(0, 0),
                 end: const Offset(1, 1),
                 duration: 400.ms,
                 curve: Curves.elasticOut),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text('Level Complete!',
                 style: GoogleFonts.nunito(
                     fontSize: 26,
@@ -867,9 +914,12 @@ class _LevelCompleteDialog extends StatelessWidget {
               children: List.generate(
                   3,
                   (i) => Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Text(i < stars ? '⭐' : '☆',
-                            style: const TextStyle(fontSize: 32)),
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Icon(
+                          i < stars ? Icons.star_rounded : Icons.star_border_rounded,
+                          color: i < stars ? const Color(0xFFE2B93C) : AppColors.surfaceLight,
+                          size: 38,
+                        ),
                       )
                           .animate(delay: Duration(milliseconds: 200 + i * 150))
                           .scale(
@@ -891,7 +941,11 @@ class _LevelCompleteDialog extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('🪙', style: TextStyle(fontSize: 20)),
+                  const Icon(
+                    LucideIcons.coins,
+                    color: Color(0xFFE2B93C),
+                    size: 22,
+                  ),
                   const SizedBox(width: 8),
                   Text('+$score',
                       style: GoogleFonts.nunito(
@@ -916,8 +970,9 @@ class _LevelCompleteDialog extends StatelessWidget {
             _DialogButton(
               label: '🎬 Double Coins',
               icon: Icons.add_circle_outline,
-              gradient: const LinearGradient(
-                  colors: [Color(0xFF856404), Color(0xFFCC9A06)]),
+              gradient: AppColors.secondaryGradient,
+              textColor: AppColors.textPrimary,
+              iconColor: AppColors.textPrimary,
               onTap: onDoubleCoins,
             ),
             const SizedBox(height: 10),
@@ -959,12 +1014,12 @@ class _GameOverDialog extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(28),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: AppColors.background,
           borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: AppColors.accent.withValues(alpha: 0.4)),
+          border: Border.all(color: AppColors.surfaceLight, width: 3),
           boxShadow: [
             BoxShadow(
-                color: AppColors.accent.withValues(alpha: 0.2), blurRadius: 32),
+                color: AppColors.primary.withValues(alpha: 0.15), blurRadius: 32),
           ],
         ),
         child: Column(
@@ -1000,8 +1055,9 @@ class _GameOverDialog extends StatelessWidget {
             _DialogButton(
               label: 'Restart Level',
               icon: Icons.refresh_rounded,
-              gradient: const LinearGradient(
-                  colors: [Color(0xFF252545), Color(0xFF1A1A2E)]),
+              gradient: AppColors.secondaryGradient,
+              textColor: AppColors.textPrimary,
+              iconColor: AppColors.textPrimary,
               onTap: onRestart,
             ),
             const SizedBox(height: 10),
@@ -1026,12 +1082,16 @@ class _DialogButton extends StatelessWidget {
   final IconData icon;
   final Gradient gradient;
   final VoidCallback onTap;
-
+  final Color textColor;
+  final Color iconColor;
+ 
   const _DialogButton({
     required this.label,
     required this.icon,
     required this.gradient,
     required this.onTap,
+    this.textColor = Colors.white,
+    this.iconColor = Colors.white,
   });
 
   @override
@@ -1053,13 +1113,13 @@ class _DialogButton extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: Colors.white, size: 20),
+              Icon(icon, color: iconColor, size: 20),
               const SizedBox(width: 8),
               Text(label,
                   style: GoogleFonts.nunito(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: Colors.white)),
+                      color: textColor)),
             ],
           ),
         ),
@@ -1082,14 +1142,13 @@ class _GameSettingsDialog extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: AppColors.background,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: AppColors.surfaceLight),
+          border: Border.all(color: AppColors.surfaceLight, width: 3),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
+              color: AppColors.primary.withValues(alpha: 0.15),
+              blurRadius: 32,
             ),
           ],
         ),
@@ -1138,9 +1197,7 @@ class _GameSettingsDialog extends StatelessWidget {
             _DialogButton(
               label: 'Restart Level',
               icon: LucideIcons.rotateCcw,
-              gradient: const LinearGradient(
-                colors: [Color(0xFF252545), Color(0xFF1A1A2E)],
-              ),
+              gradient: AppColors.primaryGradient,
               onTap: onRestart,
             ),
             const SizedBox(height: 10),
@@ -1199,7 +1256,10 @@ class _DialogSettingsTile extends StatelessWidget {
           const Spacer(),
           Switch(
             value: value,
-            onChanged: onChanged,
+            onChanged: (val) {
+              AudioManager.instance.playClick();
+              onChanged(val);
+            },
             activeThumbColor: AppColors.primary,
           ),
         ],

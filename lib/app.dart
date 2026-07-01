@@ -21,10 +21,10 @@ class ArrowPuzzleApp extends StatelessWidget {
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
           seedColor: AppColors.primary,
-          brightness: Brightness.dark,
+          brightness: Brightness.light,
         ),
         textTheme: GoogleFonts.nunitoTextTheme(
-          ThemeData.dark().textTheme,
+          ThemeData.light().textTheme,
         ),
         scaffoldBackgroundColor: AppColors.background,
       ),

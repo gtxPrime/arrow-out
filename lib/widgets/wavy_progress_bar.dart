@@ -111,9 +111,9 @@ class _WavyProgressBarPainter extends CustomPainter {
       Radius.circular(height / 2),
     );
 
-    // Draw background track (using a contrasted muted gray-beige)
+    // Draw background track (using sage green from theme)
     final bgPaint = Paint()
-      ..color = const Color(0xFFDDD5C3)
+      ..color = AppColors.surfaceLight.withValues(alpha: 0.4)
       ..style = PaintingStyle.fill;
     canvas.drawRRect(rrect, bgPaint);
 
@@ -123,9 +123,9 @@ class _WavyProgressBarPainter extends CustomPainter {
     // Clip to the progress bar rounded rectangle shape
     canvas.clipRRect(rrect);
 
-    // Draw wavy liquid fill using solid pinkish-red color
+    // Draw wavy liquid fill using solid forest green color
     final fillPaint = Paint()
-      ..color = const Color(0xFFFF2D55)
+      ..color = AppColors.primary
       ..style = PaintingStyle.fill;
 
     final fillWidth = progress * width;

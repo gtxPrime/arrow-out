@@ -44,9 +44,10 @@ class LevelGenerator {
     final params = _paramsFor(levelNumber, type, gridSize, mask);
 
     LevelModel? level;
-    // Fewer attempts = faster generation. The 4-phase algorithm succeeds
-    // on the first or second attempt in >95% of cases.
-    final int maxAttempts = (type == LevelType.god || type == LevelType.boss || gridSize > 20) ? 80 : 40;
+    // Two-tier strategy:
+    //   _attempt() uses a CHEAP solver cap to quickly reject obvious failures.
+    //   After a candidate is found, we do ONE final strict verification.
+    final int maxAttempts = (type == LevelType.god || type == LevelType.boss || gridSize > 20) ? 120 : 60;
     for (int attempt = 0; attempt < maxAttempts && level == null; attempt++) {
       level = _attempt(
         levelNumber: levelNumber,
@@ -58,6 +59,21 @@ class LevelGenerator {
         maskShape: maskShape,
       );
     }
+
+    // Final strict verification on the accepted candidate.
+    // This single pass catches edge cases the cheap cap may have missed.
+    if (level != null) {
+      final strictCap = gridSize > 20 ? 15000 : 6000;
+      final strictSolution = LevelSolver.solve(level, strictCap);
+      if (strictSolution == null) {
+        // Rare: cheap cap accepted a level the strict cap rejects.
+        // Use fallback rather than returning a broken level.
+        level = null;
+      } else {
+        level = level.copyWith(solutionOrder: strictSolution);
+      }
+    }
+
     return level ?? _fallback(levelNumber, gridSize, mask, type);
   }
 
@@ -500,21 +516,12 @@ class LevelGenerator {
         }
       }
 
-      // Any remaining unassigned orphan dots (not hit by any arrow) get assigned random types
+      // Any orphan dot not hit by any arrow gets a NEUTRAL type.
+      // Random colored directions here can create unsolvable traps for
+      // arrows that cross them later, so we always default to neutral.
       for (final key in emptyKeys) {
         if (!orphanMap.containsKey(key)) {
-          final bool shouldColor = rng.nextDouble() < colorProb;
-          if (shouldColor) {
-            final directions = [
-              OrphanDotType.up,
-              OrphanDotType.down,
-              OrphanDotType.left,
-              OrphanDotType.right,
-            ];
-            orphanMap[key] = directions[rng.nextInt(4)];
-          } else {
-            orphanMap[key] = OrphanDotType.neutral;
-          }
+          orphanMap[key] = OrphanDotType.neutral;
         }
       }
 
@@ -551,16 +558,20 @@ class LevelGenerator {
       orphanDots: orphanDots,
     );
 
-    // Verify solvability with solver.
-    // Small grids: tight cap (600) — construction order is almost always valid.
-    // Large grids: slightly wider cap (2000) for complex deflector paths.
-    final solverCap = gridSize > 20 ? 2000 : 600;
-    final bfsSolution = LevelSolver.solve(level, solverCap);
-    
-    // If the solver times out/fails on complex levels, fall back to the guaranteed reverse construction order
-    // to prevent slow level generation loops/freezes.
-    final solution = bfsSolution ?? constructionSolution;
-    return level.copyWith(solutionOrder: solution);
+    // ── Solvability verification ────────────────────────────────────────────
+    // IMPORTANT: never fall back to construction order — colorLock pairs and
+    // orphan-dot deflections can make it invalid even when arrows were placed
+    // in reverse construction order. Reject and retry instead.
+    // ── Quick solvability check (cheap cap) ────────────────────────────────
+    // This runs on EVERY attempt, so keep it fast. It catches:
+    //   - Orphan-dot deflection loops that make levels unsolvable
+    //   - ColorLock pairs that are mutually blocked by other arrows
+    // A strict final check is done once in generateLevel() after this passes.
+    final quickCap = gridSize > 20 ? 12000 : 5000;
+    final quickSolution = LevelSolver.solve(level, quickCap);
+    if (quickSolution == null) return null; // reject, try again
+
+    return level.copyWith(solutionOrder: quickSolution);
   }
 
   // ── Helper: place an arrow and update occupied sets ──────────────────────────
@@ -916,21 +927,35 @@ class LevelGenerator {
         final ki = stdIndices[j];
         if (arrows[ki].mechanic != SnakeMechanic.standard) continue;
 
-        // Try assigning li as lock, ki as key
         final arrowLock = arrows[li];
         final arrowKey  = arrows[ki];
 
-        // Key's exit path must not cross Lock's body cells.
-        // We only check for mutual blocking (not blocked by unrelated arrows),
-        // which allows inner arrows to be paired successfully instead of failing.
+        // Build the full occupied set of ALL other arrows' cells
+        // (excluding lock and key cells, since they exit simultaneously).
         final lockCells = arrowLock.path.map((p) => '${p[0]},${p[1]}').toSet();
-        final keyClear = _simulateExitClear(arrowKey, gridSize, lockCells, orphanMap);
+        final keyCells  = arrowKey.path.map((p) => '${p[0]},${p[1]}').toSet();
+        final otherOccupied = <String>{};
+        for (int k = 0; k < arrows.length; k++) {
+          if (k == li || k == ki) continue;
+          for (final pt in arrows[k].path) {
+            otherOccupied.add('${pt[0]},${pt[1]}');
+          }
+        }
 
-        // Lock's exit path must not cross Key's body cells
-        final keyCells = arrowKey.path.map((p) => '${p[0]},${p[1]}').toSet();
-        final lockClear = _simulateExitClear(arrowLock, gridSize, keyCells, orphanMap);
+        // Key must be able to exit ignoring lock, but blocked by all other arrows
+        final keyBlockedByOther = _simulateExitClear(arrowKey, gridSize,
+            otherOccupied..addAll(lockCells)..removeAll(keyCells), orphanMap);
+        // Restore — rebuild without mutation side-effects
+        final otherOcc2 = <String>{};
+        for (int k = 0; k < arrows.length; k++) {
+          if (k == li || k == ki) continue;
+          for (final pt in arrows[k].path) otherOcc2.add('${pt[0]},${pt[1]}');
+        }
+        // Lock must be able to exit ignoring key, but blocked by all other arrows
+        final lockBlockedByOther = _simulateExitClear(arrowLock, gridSize,
+            otherOcc2..addAll(keyCells)..removeAll(lockCells), orphanMap);
 
-        if (keyClear && lockClear) {
+        if (keyBlockedByOther && lockBlockedByOther) {
           arrows[ki] = arrows[ki].copyWith(mechanic: SnakeMechanic.colorLock, colorGroup: actualPairs);
           arrows[li] = arrows[li].copyWith(mechanic: SnakeMechanic.colorLock, colorGroup: actualPairs);
           actualPairs++;

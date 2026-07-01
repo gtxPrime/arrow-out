@@ -132,22 +132,20 @@ The binary format uses:
 
 `LevelRepository` loads only the header on startup and seeks directly to whichever level is needed — the rest of the file is untouched.
 
-#### Regenerating `levels.bin`
+#### Regenerating & Verifying `levels.bin`
 
-Run this whenever you change the generator or add new levels:
+To verify all 500 levels and regenerate any unsolvable ones, run the parallel check-and-fix pipeline. This splits the work across 5 parallel processes on multiple CPU cores:
 ```bash
-flutter test test/generate_levels_bin_test.dart -r expanded
+powershell -ExecutionPolicy Bypass -File .\run_parallel.ps1
 ```
-Then commit the updated file:
-```bash
-git add assets/levels.bin
-git commit -m "asset: regenerate levels.bin"
-```
+This script will spawn the concurrent jobs, optimize their priorities to High, display live progress logs, and automatically merge and spot-verify the final output file `assets/levels.bin`.
+
 
 #### Scaling to more levels
-1. Change `const totalLevels = 500` → your new count in `test/generate_levels_bin_test.dart`
+1. Change `const totalLevels = 500` → your new count in `test/generate_and_verify_test.dart`
 2. Update `static int get totalLevels => 500` in `lib/data/repositories/level_repository.dart`
 3. Re-run the generator — the index table grows automatically
+
 
 
 ### <img src="https://img.shields.io/badge/-Components-3F51B5?style=flat-square&logo=navigation&logoColor=white" align="center" /> Arrow Definition & Components

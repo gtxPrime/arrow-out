@@ -87,3 +87,19 @@ assets/images/spritesheet.png
 
 # Coverage
 coverage/
+
+# Generate Progress Logs
+assets/generate_progress*.txt
+assets/generate_progress*.log
+assets/levels_*_*.bin
+
+# Local Generator & Parallel Execution Utilities
+bin/
+run_parallel.ps1
+test/debug_test.dart
+test/generate_and_verify_test.dart
+test/merge_chunks_test.dart
+test/verify_all_levels_test.dart
+test/verify_bin_solvability_test.dart
+
+

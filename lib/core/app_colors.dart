@@ -4,67 +4,73 @@ class AppColors {
   AppColors._();
 
   // Brand
-  static const Color primary = Color(0xFF22252A);      // Dark gray / almost black
-  static const Color primaryLight = Color(0xFF3F444D);
-  static const Color primaryDark = Color(0xFF141619);
-  static const Color accent = Color(0xFFB33939);       // Warm red
-  static const Color accentGold = Color(0xFFC08255);   // Soft gold
-  static const Color accentGreen = Color(0xFF4A7C59);  // Forest green
-  static const Color accentOrange = Color(0xFFC8703F); // Warm orange
+  static const Color primary = Color(0xFF5E6B56);      // Dark forest green
+  static const Color primaryLight = Color(0xFF829079);
+  static const Color primaryDark = Color(0xFF3C4636);
+  static const Color accent = Color(0xFF5E6B56);
+  static const Color accentGold = Color(0xFF8B9B82);   // Sagey gold
+  static const Color accentGreen = Color(0xFF5E6B56);
+  static const Color accentOrange = Color(0xFF829079);
 
   // Backgrounds
-  static const Color background = Color(0xFFF7F1E5);   // Warm cream background
-  static const Color surface = Color(0xFFFFFDF9);      // Card surface
-  static const Color surfaceLight = Color(0xFFEFE9DC); // Light surface
-  static const Color gridBg = Color(0xFFF7F1E5);      // Grid background
+  static const Color background = Color(0xFFF2EFEA);   // Warm cream background
+  static const Color surface = Color(0xFFFFFFFF);      // Card surface
+  static const Color surfaceLight = Color(0xFFA8B5A2); // Light surface / sage green
+  static const Color gridBg = Color(0xFFF2EFEA);       // Grid background
 
-  // Arrow direction colors — solid black for maximum legibility
-  static const Color arrowUp    = Color(0xFF1A1A1A);
-  static const Color arrowDown  = Color(0xFF1A1A1A);
-  static const Color arrowLeft  = Color(0xFF1A1A1A);
-  static const Color arrowRight = Color(0xFF1A1A1A);
+  // Arrow direction colors — solid dark green for maximum legibility
+  static const Color arrowUp    = Color(0xFF3C4636);
+  static const Color arrowDown  = Color(0xFF3C4636);
+  static const Color arrowLeft  = Color(0xFF3C4636);
+  static const Color arrowRight = Color(0xFF3C4636);
 
   // Difficulty colors
-  static const Color easy = Color(0xFF4A7C59);
-  static const Color medium = Color(0xFFC08255);
-  static const Color hard = Color(0xFFC8703F);
-  static const Color expert = Color(0xFFB33939);
-  static const Color master = Color(0xFF7A4A75);
+  static const Color easy = Color(0xFF829079);
+  static const Color medium = Color(0xFF708066);
+  static const Color hard = Color(0xFF5E6B56);
+  static const Color expert = Color(0xFF4C5745);
+  static const Color master = Color(0xFF3C4636);
 
   // Text
-  static const Color textPrimary = Color(0xFF6E503F);
-  static const Color textSecondary = Color(0xFF8B7365);
-  static const Color textMuted = Color(0xFFB5A79E);
+  static const Color textPrimary = Color(0xFF3C4636);
+  static const Color textSecondary = Color(0xFF5E6B56);
+  static const Color textMuted = Color(0xFF829079);
 
   // UI Elements
-  static const Color heartRed = Color(0xFFB33939);
-  static const Color heartEmpty = Color(0xFFDDD5C3);
-  static const Color streakFire = Color(0xFFC8703F);
-  static const Color coinGold = Color(0xFFC08255);
-  static const Color starYellow = Color(0xFFC08255);
-  static const Color borderGlow = Color(0xFF6E503F);
+  static const Color heartRed = Color(0xFF5E6B56);
+  static const Color heartEmpty = Color(0xFFD3CFC9);
+  static const Color streakFire = Color(0xFF5E6B56);
+  static const Color coinGold = Color(0xFF829079);
+  static const Color starYellow = Color(0xFF5E6B56);
+  static const Color borderGlow = Color(0xFF5E6B56);
 
   // Gradients
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFF6E503F), Color(0xFF8B7365)],
+    colors: [Color(0xFF5E6B56), Color(0xFF7A8972)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient secondaryGradient = LinearGradient(
+    colors: [Color(0xFFA8B5A2), Color(0xFFC0CDC0)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient bgGradient = LinearGradient(
-    colors: [Color(0xFFF7F1E5), Color(0xFFF5EFEB)],
+    colors: [Color(0xFFF2EFEA), Color(0xFFE2DFDA)],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
 
   static const LinearGradient successGradient = LinearGradient(
-    colors: [Color(0xFF4A7C59), Color(0xFF6C9C7B)],
+    colors: [Color(0xFF5E6B56), Color(0xFF708066)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient dangerGradient = LinearGradient(
-    colors: [Color(0xFFB33939), Color(0xFFCC5A5A)],
+    colors: [Color(0xFF8B5E56), Color(0xFFA27870)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );

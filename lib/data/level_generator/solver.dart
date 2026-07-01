@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import '../models/arrow.dart';
 import '../models/level.dart';
 
@@ -5,222 +6,234 @@ import '../models/level.dart';
 /// Uses DFS with backtracking over grid states to find at least one solution.
 /// Returns the solution sequence (list of arrow IDs) or null if unsolvable.
 ///
-/// Blocking rule per spec: ONLY the head's immediate next cell matters.
-/// If that cell is empty or outside the mask → the snake can clear.
-/// The body always follows because each segment inherits the vacated cell
-/// of the segment ahead of it — no further raycast needed.
+/// This implementation is highly optimized using typed arrays, flat indices,
+/// and incremental state hashing to run with zero allocations in the DFS hot path.
 class LevelSolver {
   static const int maxStates = 5000; // Safety cap for DFS recursion
 
   /// Returns a valid solution order of arrow IDs, or null if unsolvable.
-  static List<String>? solve(LevelModel level,
-      [int maxStatesLimit = maxStates]) {
-    final initial = _GridState.fromLevel(level);
+  static List<String>? solve(LevelModel level, [int maxStatesLimit = maxStates]) {
+    final gridSize = level.gridSize;
+    final arrows = level.arrows;
+    final orphanDots = level.orphanDots;
+
+    // 1. Initialize occupancy board (0 = empty, idx + 1 = arrow occupied)
+    final board = Uint16List(gridSize * gridSize);
+    for (int i = 0; i < arrows.length; i++) {
+      final arrow = arrows[i];
+      for (final pt in arrow.path) {
+        board[pt[0] * gridSize + pt[1]] = i + 1;
+      }
+    }
+
+    // 2. Initialize orphan dots (store indices and type index)
+    final orphanTypes = Uint8List(gridSize * gridSize);
+    final activeOrphans = List<bool>.filled(gridSize * gridSize, false);
+    for (final od in orphanDots) {
+      final idx = od.row * gridSize + od.col;
+      orphanTypes[idx] = od.type.index;
+      activeOrphans[idx] = true;
+    }
+
+    // 3. Precalculate color partners (N-sized array, mapping index to partner index, or -1)
+    final groupToIndices = <int, List<int>>{};
+    for (int i = 0; i < arrows.length; i++) {
+      final grp = arrows[i].colorGroup;
+      if (grp != null) {
+        groupToIndices.putIfAbsent(grp, () => []).add(i);
+      }
+    }
+    final partnerIndices = List<int>.filled(arrows.length, -1);
+    for (final indices in groupToIndices.values) {
+      if (indices.length == 2) {
+        partnerIndices[indices[0]] = indices[1];
+        partnerIndices[indices[1]] = indices[0];
+      }
+    }
+
+    // 4. Initialize tracker states
+    final activeArrows = List<bool>.filled(arrows.length, true);
+    
+    // Hash state incrementally
+    int arrowHash = 0;
+    for (int i = 0; i < arrows.length; i++) {
+      arrowHash ^= arrows[i].id.hashCode;
+    }
+    int dotHash = orphanDots.length * 997;
+    for (final od in orphanDots) {
+      dotHash ^= od.key.hashCode;
+    }
+    int groupHash = 0;
+
     final visited = <String>{};
     final path = <String>[];
-    if (_dfs(initial, level.gridSize, visited, path, maxStatesLimit)) {
-      return path;
+    int statesVisited = 0;
+
+    bool dfs(int remainingCount) {
+      if (remainingCount == 0) return true;
+      if (statesVisited > maxStatesLimit) return false;
+
+      final hash = '$arrowHash|$groupHash|$dotHash';
+      if (visited.contains(hash)) return false;
+      visited.add(hash);
+      statesVisited++;
+
+      // Try arrows in reverse placement order to guide DFS to first-cleared
+      for (int i = arrows.length - 1; i >= 0; i--) {
+        if (!activeArrows[i]) continue;
+
+        final partner = partnerIndices[i];
+        if (partner != -1) {
+          // Color Locked Pair
+          // To avoid duplicate work, only process the pair from the lower index
+          if (i > partner) continue;
+          if (!activeArrows[partner]) continue;
+
+          // Try to exit both
+          final consumed1 = _simulateExit(i, partner, gridSize, board, activeOrphans, orphanTypes, arrows);
+          if (consumed1 == null) continue;
+          final consumed2 = _simulateExit(partner, i, gridSize, board, activeOrphans, orphanTypes, arrows);
+          if (consumed2 == null) continue;
+
+          // Apply move
+          activeArrows[i] = false;
+          activeArrows[partner] = false;
+          final id1 = arrows[i].id;
+          final id2 = arrows[partner].id;
+          arrowHash ^= id1.hashCode ^ id2.hashCode;
+
+          // Clear cells on board
+          for (final pt in arrows[i].path) board[pt[0] * gridSize + pt[1]] = 0;
+          for (final pt in arrows[partner].path) board[pt[0] * gridSize + pt[1]] = 0;
+
+          // Deactivate consumed orphans
+          final deactivated = <int>[];
+          for (final idx in consumed1) {
+            if (activeOrphans[idx]) {
+              activeOrphans[idx] = false;
+              deactivated.add(idx);
+              final odKey = '${idx ~/ gridSize},${idx % gridSize}';
+              dotHash ^= odKey.hashCode;
+            }
+          }
+          for (final idx in consumed2) {
+            if (activeOrphans[idx]) {
+              activeOrphans[idx] = false;
+              deactivated.add(idx);
+              final odKey = '${idx ~/ gridSize},${idx % gridSize}';
+              dotHash ^= odKey.hashCode;
+            }
+          }
+
+          final grp = arrows[i].colorGroup!;
+          groupHash ^= grp * 31;
+
+          path.add(id1); // click registers the first arrow ID
+
+          if (dfs(remainingCount - 2)) return true;
+
+          // Backtrack
+          path.removeLast();
+          groupHash ^= grp * 31;
+          for (final idx in deactivated) {
+            activeOrphans[idx] = true;
+            final odKey = '${idx ~/ gridSize},${idx % gridSize}';
+            dotHash ^= odKey.hashCode;
+          }
+          for (final pt in arrows[partner].path) board[pt[0] * gridSize + pt[1]] = partner + 1;
+          for (final pt in arrows[i].path) board[pt[0] * gridSize + pt[1]] = i + 1;
+          arrowHash ^= id1.hashCode ^ id2.hashCode;
+          activeArrows[partner] = true;
+          activeArrows[i] = true;
+        } else {
+          // Standard Single Arrow
+          final consumed = _simulateExit(i, -1, gridSize, board, activeOrphans, orphanTypes, arrows);
+          if (consumed == null) continue;
+
+          // Apply move
+          activeArrows[i] = false;
+          final id = arrows[i].id;
+          arrowHash ^= id.hashCode;
+
+          // Clear cells on board
+          for (final pt in arrows[i].path) board[pt[0] * gridSize + pt[1]] = 0;
+
+          // Deactivate consumed orphans
+          final deactivated = <int>[];
+          for (final idx in consumed) {
+            if (activeOrphans[idx]) {
+              activeOrphans[idx] = false;
+              deactivated.add(idx);
+              final odKey = '${idx ~/ gridSize},${idx % gridSize}';
+              dotHash ^= odKey.hashCode;
+            }
+          }
+
+          path.add(id);
+
+          if (dfs(remainingCount - 1)) return true;
+
+          // Backtrack
+          path.removeLast();
+          for (final idx in deactivated) {
+            activeOrphans[idx] = true;
+            final odKey = '${idx ~/ gridSize},${idx % gridSize}';
+            dotHash ^= odKey.hashCode;
+          }
+          for (final pt in arrows[i].path) board[pt[0] * gridSize + pt[1]] = i + 1;
+          arrowHash ^= id.hashCode;
+          activeArrows[i] = true;
+        }
+      }
+      return false;
     }
+
+    if (dfs(arrows.length)) return path;
     return null;
   }
 
-  static bool _dfs(_GridState state, int gridSize, Set<String> visited,
-      List<String> path, int maxStatesLimit) {
-    if (state.isEmpty) return true;
-    if (visited.length > maxStatesLimit) return false;
-
-    final hash = state.hash;
-    if (visited.contains(hash)) return false;
-    visited.add(hash);
-
-    // Build occupied cells set once per state for O(1) lookup
-    final occupied = <String>{};
-    for (final a in state.arrows.values) {
-      for (final pt in a.path) {
-        occupied.add('${pt[0]},${pt[1]}');
-      }
-    }
-
-    // Try all arrows in reverse placement order (heavily guides DFS to first-cleared)
-    final arrowList = state.arrows.values.toList();
-    for (int i = arrowList.length - 1; i >= 0; i--) {
-      final arrow = arrowList[i];
-      if (arrow.state == ArrowState.locked) continue;
-
-      final result = _tryMove(state, arrow, gridSize, occupied);
-      if (result == null) continue; // Blocked
-
-      path.add(arrow.id);
-      if (_dfs(result, gridSize, visited, path, maxStatesLimit)) {
-        return true;
-      }
-      path.removeLast(); // Backtrack
-    }
-
-    return false;
-  }
-
-  /// Returns new state if arrow can clear, null if blocked.
-  /// Simulates deflection through any orphan dots in the exit path.
-  static _GridState? _tryMove(
-      _GridState state, ArrowModel arrow, int gridSize, Set<String> occupied) {
-    final grp = arrow.colorGroup;
-    if (grp != null) {
-      final groupArrows =
-          state.arrows.values.where((a) => a.colorGroup == grp).toList();
-      if (groupArrows.length == 2) {
-        final arrow1 = groupArrows[0];
-        final arrow2 = groupArrows[1];
-
-        // Create occupied set excluding both arrows' cells so they don't block each other
-        final occupiedWithoutGroup = Set<String>.from(occupied);
-        for (final pt in arrow1.path)
-          occupiedWithoutGroup.remove('${pt[0]},${pt[1]}');
-        for (final pt in arrow2.path)
-          occupiedWithoutGroup.remove('${pt[0]},${pt[1]}');
-
-        final result1 = _simulateExit(
-            arrow1, gridSize, occupiedWithoutGroup, state.orphanDots);
-        final result2 = _simulateExit(
-            arrow2, gridSize, occupiedWithoutGroup, state.orphanDots);
-
-        if (result1 == null || result2 == null) return null;
-
-        final newArrows = Map<String, ArrowModel>.from(state.arrows)
-          ..remove(arrow1.id)
-          ..remove(arrow2.id);
-
-        final newClearedGroups = Set<int>.from(state.clearedColorGroups)
-          ..add(grp);
-        final newOrphanDots = Map<String, OrphanDotType>.from(state.orphanDots);
-        for (final k in [...result1.consumed, ...result2.consumed]) {
-          newOrphanDots.remove(k);
-        }
-        return _GridState(newArrows, newClearedGroups, newOrphanDots);
-      }
-    }
-
-    // Standard single arrow
-    final result = _simulateExit(arrow, gridSize, occupied, state.orphanDots);
-    if (result == null) return null;
-
-    final newArrows = Map<String, ArrowModel>.from(state.arrows)
-      ..remove(arrow.id);
-    final newOrphanDots = Map<String, OrphanDotType>.from(state.orphanDots);
-    for (final k in result.consumed) newOrphanDots.remove(k);
-    return _GridState(newArrows, state.clearedColorGroups, newOrphanDots);
-  }
-
-  /// Simulates the exit path for one arrow.
-  /// Returns an [_ExitResult] (with consumed dot keys) on success, or null if blocked.
-  static _ExitResult? _simulateExit(ArrowModel arrow, int gridSize,
-      Set<String> occupied, Map<String, OrphanDotType> orphanDots) {
-    final myPathSet = arrow.path.map((p) => '${p[0]},${p[1]}').toSet();
+  static List<int>? _simulateExit(
+      int arrowIdx,
+      int partnerIdx,
+      int gridSize,
+      Uint16List board,
+      List<bool> activeOrphans,
+      Uint8List orphanTypes,
+      List<ArrowModel> arrows) {
+    final arrow = arrows[arrowIdx];
     ArrowDirection currentDir = arrow.direction;
     final head = arrow.path[0];
     var d = currentDir.delta;
     int nr = head[0] + d[0];
     int nc = head[1] + d[1];
-    final consumed = <String>[];
-    final visited = <String>{};
+    final consumed = <int>[];
+    
+    // Flat index visited map to prevent deflection loops
+    final visited = List<bool>.filled(gridSize * gridSize, false);
 
     while (nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize) {
-      final key = '$nr,$nc';
-      if (visited.contains(key)) return null; // infinite loop
-      visited.add(key);
+      final idx = nr * gridSize + nc;
+      if (visited[idx]) return null;
+      visited[idx] = true;
 
-      if (orphanDots.containsKey(key)) {
-        consumed.add(key);
-        final dotType = orphanDots[key]!;
-        if (dotType == OrphanDotType.up) {
-          currentDir = ArrowDirection.up;
-        } else if (dotType == OrphanDotType.down) {
-          currentDir = ArrowDirection.down;
-        } else if (dotType == OrphanDotType.left) {
-          currentDir = ArrowDirection.left;
-        } else if (dotType == OrphanDotType.right) {
-          currentDir = ArrowDirection.right;
+      if (activeOrphans[idx]) {
+        consumed.add(idx);
+        final typeVal = orphanTypes[idx];
+        if (typeVal == 0) currentDir = ArrowDirection.up;
+        else if (typeVal == 1) currentDir = ArrowDirection.down;
+        else if (typeVal == 2) currentDir = ArrowDirection.left;
+        else if (typeVal == 3) currentDir = ArrowDirection.right;
+      } else {
+        final val = board[idx];
+        if (val != 0 && val != arrowIdx + 1 && (partnerIdx == -1 || val != partnerIdx + 1)) {
+          return null;
         }
-      } else if (occupied.contains(key) && !myPathSet.contains(key)) {
-        return null; // blocked by real arrow
       }
 
       d = currentDir.delta;
       nr += d[0];
       nc += d[1];
     }
-    return _ExitResult(consumed);
+    return consumed;
   }
-
-  static bool _isPathBlocked(
-      ArrowModel arrow, int gridSize, Set<String> occupied) {
-    final delta = arrow.direction.delta;
-    final head = arrow.path[0];
-    int nr = head[0] + delta[0];
-    int nc = head[1] + delta[1];
-
-    while (nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize) {
-      if (occupied.contains('$nr,$nc')) {
-        return true;
-      }
-      nr += delta[0];
-      nc += delta[1];
-    }
-    return false;
-  }
-}
-
-// ─── Internal state for DFS ───────────────────────────────────────────────────────────────
-
-class _ExitResult {
-  final List<String> consumed; // orphan dot keys consumed along exit path
-  _ExitResult(this.consumed);
-}
-
-class _GridState {
-  final Map<String, ArrowModel> arrows;
-  final Set<int> clearedColorGroups;
-  final Map<String, OrphanDotType> orphanDots;
-
-  _GridState(this.arrows,
-      [Set<int>? clearedColorGroups, Map<String, OrphanDotType>? orphanDots])
-      : clearedColorGroups = clearedColorGroups ?? {},
-        orphanDots = orphanDots ?? {};
-
-  bool get isEmpty => arrows.isEmpty;
-
-  /// Fast hash: XOR of stable per-arrow integer codes + orphan dot count.
-  /// Avoids allocating sorted string lists on every DFS node (hot path).
-  String get hash {
-    // XOR is order-independent so no sort needed
-    int arrowHash = 0;
-    for (final id in arrows.keys) {
-      arrowHash ^= id.hashCode;
-    }
-    int groupHash = 0;
-    for (final g in clearedColorGroups) {
-      groupHash ^= g * 31;
-    }
-    // Include dot count + a cheap content fingerprint
-    int dotHash = orphanDots.length * 997;
-    for (final k in orphanDots.keys) {
-      dotHash ^= k.hashCode;
-    }
-    return '$arrowHash|$groupHash|$dotHash';
-  }
-
-  factory _GridState.fromLevel(LevelModel level) {
-    final Map<String, ArrowModel> map = {};
-    for (final arrow in level.arrows) {
-      map[arrow.id] = arrow.copyWith(state: ArrowState.idle);
-    }
-    final orphanMap = {for (final od in level.orphanDots) od.key: od.type};
-    return _GridState(map, {}, orphanMap);
-  }
-}
-
-class _SearchNode {
-  final _GridState state;
-  final List<String> moves;
-  _SearchNode(this.state, this.moves);
 }
