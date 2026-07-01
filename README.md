@@ -65,7 +65,8 @@
   * Starting levels ($\le 20$) feature neutral (grey) dots that arrows pass straight through.
   * Higher levels introduce red (clockwise/right) and blue (counter-clockwise/left) deflector dots.
 * ✦ **Daily Streaks:** Tracks user gameplay consistency and records daily play sessions.
-* ✦ **Lives System:** Keep track of remaining lives with custom visual meters and animated indicators.
+* ✦ **Lives System:** Keep track of remaining lives with custom visual meters and animated, synchronized heart icons.
+* ✦ **Timed Challenges:** God levels (after level 100) and Boss levels (after level 200) feature dynamic countdown timers. The duration scales with the difficulty and quantity of arrows. Resuming from a timeout via rewarded ads grants a dynamic extra time buffer matching the quantity of remaining arrows, coupled with an observer-driven auto-pause system for background/foreground transitions.
 
 ### <img src="https://img.shields.io/badge/-Juice-E040FB?style=flat-square&logo=sparkles&logoColor=white" align="center" /> Visual & Sound Effects
 * ✦ **Juicy Animations:** Utilizes `flutter_animate`, Confetti, and custom Lottie integrations for satisfying level-complete feedback.

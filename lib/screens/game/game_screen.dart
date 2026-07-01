@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'package:flutter/services.dart';
@@ -30,7 +31,7 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> {
+class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   late LevelModel _level;
   late ArrowPuzzleGame _game;
   GameState? _gameState;
@@ -43,9 +44,18 @@ class _GameScreenState extends State<GameScreen> {
   BannerAd? _bannerAd;
   bool _isBannerAdLoaded = false;
 
+  // Timer fields
+  Timer? _levelTimer;
+  int _timeRemaining = 0;
+  int _totalTime = 0;
+  bool _isTimeoutState = false;
+  bool _isGamePaused = false;
+  bool _isAppBackgrounded = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _confettiController =
         ConfettiController(duration: const Duration(seconds: 2));
     _initBannerAd();
@@ -144,6 +154,8 @@ class _GameScreenState extends State<GameScreen> {
       onGameOver: _onGameOver,
       onLifeLost: _onLifeLost,
     );
+
+    _resetTimerForLevel();
   }
 
   void _onGameStateChanged() {
@@ -163,6 +175,7 @@ class _GameScreenState extends State<GameScreen> {
 
   void _onLevelComplete() {
     if (!mounted || _showingComplete) return;
+    _levelTimer?.cancel();
     setState(() => _showingComplete = true);
     if (context.read<ProgressRepository>().vibrationEnabled) {
       HapticFeedback.lightImpact();
@@ -234,11 +247,13 @@ class _GameScreenState extends State<GameScreen> {
         _showingGameOver = false;
         _game.resetLevel();
         _lives = AppConstants.maxLives;
+        _resetTimerForLevel();
       });
     }
   }
 
   Future<void> _showSettingsDialog() async {
+    setState(() => _isGamePaused = true);
     await showDialog(
       context: context,
       barrierDismissible: true,
@@ -249,6 +264,9 @@ class _GameScreenState extends State<GameScreen> {
         },
       ),
     );
+    if (mounted) {
+      setState(() => _isGamePaused = false);
+    }
   }
 
   void _handleNextLevel() {
@@ -336,21 +354,40 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Future<void> _showGameOverDialog() async {
+    final levelType = AppConstants.levelTypeFor(_level.levelNumber);
+    final hasTimer = (levelType == LevelType.god && _level.levelNumber > 100) ||
+        (levelType == LevelType.boss && _level.levelNumber > 200);
+
+    int continueTime = 0;
+    if (hasTimer && _gameState != null) {
+      final remainingArrows = _gameState!.arrows.where((a) => a.state != ArrowState.sliding).length;
+      continueTime = _calculateContinueDuration(_level.levelNumber, remainingArrows);
+    }
+
     await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => _GameOverDialog(
         level: _level,
+        isTimeout: _isTimeoutState,
+        continueTime: continueTime,
         onContinue: () {
-          // Watch rewarded ad to restore 1 life
+          // Watch rewarded ad to restore 1 life or add extra time
           final adManager = context.read<AdManager>();
           Navigator.pop(context);
           adManager.showRewarded(
             onRewarded: () {
               setState(() {
                 _showingGameOver = false;
-                _gameState!.restoreLife();
-                _lives = _gameState!.lives;
+                if (_isTimeoutState) {
+                  _timeRemaining = continueTime; // Add dynamic extra time
+                  _isTimeoutState = false;
+                  _gameState!.resumeFromTimeout();
+                  _startLevelTimer();
+                } else {
+                  _gameState!.restoreLife();
+                  _lives = _gameState!.lives;
+                }
               });
             },
             onDismissed: () {},
@@ -370,10 +407,105 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _levelTimer?.cancel();
     _gameState?.removeListener(_onGameStateChanged);
     _confettiController.dispose();
     _bannerAd?.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _isAppBackgrounded = true;
+    } else if (state == AppLifecycleState.resumed) {
+      _isAppBackgrounded = false;
+      // Auto-pause and show settings dialog if returned to an active timed level
+      final levelType = AppConstants.levelTypeFor(_level.levelNumber);
+      final hasTimer = (levelType == LevelType.god && _level.levelNumber > 100) ||
+          (levelType == LevelType.boss && _level.levelNumber > 200);
+      if (hasTimer && !_showingComplete && !_showingGameOver && !_isLoadingLevel && _isLevelReady && !_isGamePaused) {
+        _showSettingsDialog();
+      }
+    }
+  }
+
+  int _calculateLevelTimerDuration(int levelNum, int totalArrows) {
+    final type = AppConstants.levelTypeFor(levelNum);
+    if (type == LevelType.god && levelNum > 100) {
+      final baseSeconds = (45.0 - (levelNum - 100) * (20.0 / 400.0)).clamp(25.0, 45.0);
+      final secondsPerArrow = (2.5 - (levelNum - 100) * (1.0 / 400.0)).clamp(1.5, 2.5);
+      return (baseSeconds + secondsPerArrow * totalArrows).round();
+    } else if (type == LevelType.boss && levelNum > 200) {
+      final baseSeconds = (40.0 - (levelNum - 200) * (20.0 / 300.0)).clamp(20.0, 40.0);
+      final secondsPerArrow = (2.2 - (levelNum - 200) * (0.8 / 300.0)).clamp(1.4, 2.2);
+      return (baseSeconds + secondsPerArrow * totalArrows).round();
+    }
+    return 0;
+  }
+
+  int _calculateContinueDuration(int levelNum, int remainingArrows) {
+    final type = AppConstants.levelTypeFor(levelNum);
+    if (type == LevelType.god) {
+      final secondsPerArrow = (2.2 - (levelNum - 100) * (0.7 / 400.0)).clamp(1.5, 2.2);
+      return (20.0 + secondsPerArrow * remainingArrows).round();
+    } else if (type == LevelType.boss) {
+      final secondsPerArrow = (2.0 - (levelNum - 200) * (0.6 / 300.0)).clamp(1.4, 2.0);
+      return (15.0 + secondsPerArrow * remainingArrows).round();
+    }
+    return 45;
+  }
+
+  void _resetTimerForLevel() {
+    _levelTimer?.cancel();
+    _isTimeoutState = false;
+    
+    final levelType = AppConstants.levelTypeFor(_level.levelNumber);
+    final hasTimer = (levelType == LevelType.god && _level.levelNumber > 100) ||
+        (levelType == LevelType.boss && _level.levelNumber > 200);
+
+    if (hasTimer) {
+      _totalTime = _calculateLevelTimerDuration(_level.levelNumber, _level.arrows.length);
+      _timeRemaining = _totalTime;
+      _startLevelTimer();
+    } else {
+      _totalTime = 0;
+      _timeRemaining = 0;
+    }
+  }
+
+  void _startLevelTimer() {
+    _levelTimer?.cancel();
+    _levelTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      
+      // Pause if game state is not active, completed, gameover, paused or backgrounded
+      if (_showingComplete || _showingGameOver || _isLoadingLevel || !_isLevelReady || _isGamePaused || _isAppBackgrounded) {
+        return;
+      }
+
+      setState(() {
+        if (_timeRemaining > 0) {
+          _timeRemaining--;
+          if (_timeRemaining == 0) {
+            timer.cancel();
+            _onTimeOut();
+          }
+        }
+      });
+    });
+  }
+
+  void _onTimeOut() {
+    if (!mounted || _showingGameOver) return;
+    setState(() {
+      _isTimeoutState = true;
+    });
+    _gameState?.forceGameOver();
   }
 
   @override
@@ -418,6 +550,16 @@ class _GameScreenState extends State<GameScreen> {
                 },
                 onSettings: _showSettingsDialog,
               ),
+
+              if (_totalTime > 0)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _TimerDisplay(
+                    timeRemaining: _timeRemaining,
+                    totalTime: _totalTime,
+                    levelType: levelType,
+                  ),
+                ),
 
               // ── Game Canvas ──────────────────────────────────────────────
               Expanded(
@@ -503,6 +645,7 @@ class _GameScreenState extends State<GameScreen> {
     required Color iconColor,
     required Widget animationWidget,
   }) {
+    setState(() => _isGamePaused = true);
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -592,7 +735,11 @@ class _GameScreenState extends State<GameScreen> {
           ),
         );
       },
-    );
+    ).then((_) {
+      if (mounted) {
+        setState(() => _isGamePaused = false);
+      }
+    });
   }
 
   Widget _buildColorLockAnimation() {
@@ -705,6 +852,102 @@ class _GameScreenState extends State<GameScreen> {
         ],
       ),
     );
+  }
+}
+
+// ── Timer Display ────────────────────────────────────────────────────────────
+
+class _TimerDisplay extends StatelessWidget {
+  final int timeRemaining;
+  final int totalTime;
+  final LevelType levelType;
+
+  const _TimerDisplay({
+    required this.timeRemaining,
+    required this.totalTime,
+    required this.levelType,
+  });
+
+  String _formatTime(int seconds) {
+    final m = (seconds ~/ 60).toString().padLeft(2, '0');
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isLowTime = timeRemaining <= 15 || timeRemaining <= totalTime * 0.15;
+    final progress = (timeRemaining / totalTime).clamp(0.0, 1.0);
+    
+    final color = isLowTime 
+        ? const Color(0xFFCC2200) // Vibrant red/orange warning
+        : (levelType == LevelType.god ? AppColors.accent : AppColors.accentOrange);
+
+    Widget content = Container(
+      width: 140,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isLowTime ? const Color(0xFFCC2200) : AppColors.surfaceLight,
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: isLowTime ? 0.3 : 0.1),
+            blurRadius: isLowTime ? 8 : 4,
+            spreadRadius: isLowTime ? 1 : 0,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                LucideIcons.hourglass,
+                color: color,
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _formatTime(timeRemaining),
+                style: GoogleFonts.nunito(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: SizedBox(
+              height: 3,
+              child: LinearProgressIndicator(
+                value: progress,
+                backgroundColor: AppColors.surfaceLight.withValues(alpha: 0.3),
+                valueColor: AlwaysStoppedAnimation<Color>(color),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (isLowTime) {
+      content = content.animate(
+        onPlay: (controller) => controller.repeat(reverse: true),
+      )
+      .scaleXY(begin: 0.96, end: 1.04, duration: 400.ms, curve: Curves.easeInOut);
+    }
+
+    return content;
   }
 }
 
@@ -996,12 +1239,16 @@ class _LevelCompleteDialog extends StatelessWidget {
 
 class _GameOverDialog extends StatelessWidget {
   final LevelModel level;
+  final bool isTimeout;
+  final int continueTime;
   final VoidCallback onContinue;
   final VoidCallback onRestart;
   final VoidCallback onMenu;
 
   const _GameOverDialog({
     required this.level,
+    this.isTimeout = false,
+    this.continueTime = 0,
     required this.onContinue,
     required this.onRestart,
     required this.onMenu,
@@ -1026,25 +1273,28 @@ class _GameOverDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
              Icon(
-               LucideIcons.heartOff,
+               isTimeout ? LucideIcons.hourglass : LucideIcons.heartOff,
                color: AppColors.accent,
                size: 52,
              ).animate().shake(duration: 500.ms),
              const SizedBox(height: 12),
-            Text('Out of Lives!',
+            Text(isTimeout ? 'Out of Time!' : 'Out of Lives!',
                 style: GoogleFonts.nunito(
                     fontSize: 26,
                     fontWeight: FontWeight.w900,
                     color: AppColors.textPrimary)),
             const SizedBox(height: 8),
-            Text('Watch an ad to get 1 more life and continue',
+            Text(
+                isTimeout
+                    ? 'Watch an ad to get +$continueTime seconds and continue'
+                    : 'Watch an ad to get 1 more life and continue',
                 style: GoogleFonts.nunito(
                     fontSize: 13, color: AppColors.textSecondary)),
             const SizedBox(height: 28),
 
             // Continue with ad
             _DialogButton(
-              label: 'Get 1 More Life & Continue',
+              label: isTimeout ? 'Get +$continueTime Seconds & Continue' : 'Get 1 More Life & Continue',
               icon: LucideIcons.clapperboard,
               gradient: AppColors.successGradient,
               onTap: onContinue,

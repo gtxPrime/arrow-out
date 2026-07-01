@@ -1,19 +1,48 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import '../core/app_colors.dart';
 
-class LivesBar extends StatelessWidget {
+class LivesBar extends StatefulWidget {
   final int lives;
   final int maxLives;
 
   const LivesBar({super.key, required this.lives, required this.maxLives});
 
   @override
+  State<LivesBar> createState() => _LivesBarState();
+}
+
+class _LivesBarState extends State<LivesBar> with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeInOut,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: List.generate(maxLives, (i) {
-        final isFull = i < lives;
+      children: List.generate(widget.maxLives, (i) {
+        final isFull = i < widget.lives;
 
         final heartWidget = Stack(
           alignment: Alignment.center,
@@ -68,17 +97,11 @@ class LivesBar extends StatelessWidget {
             transitionBuilder: (child, anim) =>
                 ScaleTransition(scale: anim, child: child),
             child: isFull
-                ? heartWidget
-                    .animate(
-                      key: ValueKey('heart_${i}_full'),
-                      onPlay: (c) => c.repeat(reverse: true),
-                    )
-                    .scale(
-                      begin: const Offset(1.0, 1.0),
-                      end: const Offset(1.05, 1.05),
-                      duration: 1800.ms,
-                      curve: Curves.easeInOut,
-                    )
+                ? ScaleTransition(
+                    key: ValueKey('heart_${i}_full'),
+                    scale: _scaleAnimation,
+                    child: heartWidget,
+                  )
                 : SizedBox(
                     key: ValueKey('heart_${i}_empty'),
                     child: heartWidget,

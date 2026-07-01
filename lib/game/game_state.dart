@@ -327,6 +327,17 @@ class GameState extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  void forceGameOver() {
+    _isGameOver = true;
+    onGameOver();
+    notifyListeners();
+  }
+
+  void resumeFromTimeout() {
+    _isGameOver = false;
+    notifyListeners();
+  }
 }
 
 enum TapResult { exited, blocked, locked, cracked, ignored }
